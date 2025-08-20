@@ -16,6 +16,8 @@ import {
   Lightbulb,
   Target,
   TrendingUp,
+  Maximize2,
+  X,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
 import Navigation from "@/components/layout/navigation";
@@ -112,6 +114,8 @@ const TopicPage = () => {
   const [completedQuestions, setCompletedQuestions] = useState<Set<string>>(
     new Set()
   );
+  const [isProgrammaticScroll, setIsProgrammaticScroll] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
   // Removed toast state and helpers
 
   const topicsData: Record<string, TopicContent> = {
@@ -657,6 +661,20 @@ console.log('End');
     }
   }, [params.topic]);
 
+  // Handle ESC key for focus mode
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && isFocusMode) {
+        setIsFocusMode(false);
+      }
+    };
+
+    if (isFocusMode) {
+      document.addEventListener("keydown", handleKeyDown);
+      return () => document.removeEventListener("keydown", handleKeyDown);
+    }
+  }, [isFocusMode]);
+
   // Handle scroll-based question switching
   useEffect(() => {
     const handleScroll = () => {
@@ -737,16 +755,26 @@ console.log('End');
     if (questionElement) {
       const scrollContainer = document.querySelector(".custom-scrollbar");
       if (scrollContainer) {
+        // Set programmatic scroll flag to prevent scroll handler interference
+        setIsProgrammaticScroll(true);
+
+        // Calculate the target scroll position
         const containerRect = scrollContainer.getBoundingClientRect();
         const questionRect = questionElement.getBoundingClientRect();
         const scrollTop = scrollContainer.scrollTop;
         const targetScrollTop =
           scrollTop + questionRect.top - containerRect.top - 100;
 
+        // Smooth scroll to the question
         scrollContainer.scrollTo({
           top: targetScrollTop,
           behavior: "smooth",
         });
+
+        // Reset programmatic scroll flag after scroll animation
+        setTimeout(() => {
+          setIsProgrammaticScroll(false);
+        }, 1200); // Slightly longer delay to ensure smooth navigation
       }
     }
   };
@@ -760,201 +788,290 @@ console.log('End');
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: customScrollbarStyles }} />
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
-        <ParticleBackground />
-        <Navigation />
+      <div
+        className={`${
+          isFocusMode ? "h-screen" : "min-h-screen"
+        } bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900`}>
+        <AnimatePresence>
+          {!isFocusMode && (
+            <motion.div
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}>
+              <ParticleBackground />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Navigation - Hidden in focus mode */}
+        <AnimatePresence>
+          {!isFocusMode && (
+            <motion.div
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}>
+              <Navigation />
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Main Content */}
-        <main className="pt-24 pb-16">
-          <div className="w-full px-2 sm:px-4">
-            {/* Topic Header - Ultra Compact Navbar Style */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="mb-4">
-              <div className="bg-white/80 dark:bg-white/10 rounded-xl p-3 backdrop-blur-sm border border-gray-200/50 dark:border-white/20 shadow-md">
-                <div className="flex items-center justify-between">
-                  {/* Left Side - Icon and Text */}
-                  <div className="flex items-center space-x-3">
-                    {/* Back Button */}
-                    <motion.button
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ duration: 0.5 }}
-                      onClick={() => router.back()}
-                      className="flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 mb-8">
-                      <ArrowLeft className="w-5 h-5" />
-                      <span>Back to Topics</span>
-                    </motion.button>
-                    <motion.div
-                      className={`w-10 h-10 ${topic.bgColor} rounded-lg flex items-center justify-center ${topic.color}`}
-                      whileHover={{ rotate: 5, scale: 1.05 }}
-                      transition={{ duration: 0.3 }}>
-                      {topic.icon}
-                    </motion.div>
-                    <div>
-                      <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-                        {topic.title} Interview Questions
-                      </h1>
-                      <p className="text-xs text-gray-600 dark:text-gray-300">
-                        {topic.description}
-                      </p>
-                    </div>
-                  </div>
+        <main
+          className={`${isFocusMode ? "pt-0" : "pt-24"} ${
+            isFocusMode ? "pb-0" : "pb-16"
+          }`}>
+          <div className={`w-full ${isFocusMode ? "px-0" : "px-0"}`}>
+            {/* Focus Mode Exit Button - Only visible in focus mode */}
+            <AnimatePresence>
+              {isFocusMode && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="fixed top-2 right-1 z-50">
+                  <motion.button
+                    onClick={() => setIsFocusMode(false)}
+                    className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-all duration-200"
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    title="Exit Focus Mode">
+                    <X className="w-4 h-4" />
+                  </motion.button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                  {/* Right Side - Progress and Stats */}
-                  <div className="flex items-center space-x-4">
-                    {/* Progress Circle - Even Smaller */}
-                    <div className="relative">
-                      <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                        <div className="w-9 h-9 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center">
-                          <span className="text-xs font-bold text-gray-900 dark:text-white">
-                            {getProgressPercentage()}%
-                          </span>
+            {/* Topic Header - Hidden in focus mode */}
+            <AnimatePresence>
+              {!isFocusMode && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.6 }}
+                  className="mb-4">
+                  <div className="bg-white/80 dark:bg-white/10 rounded-none p-4 backdrop-blur-sm border-b border-gray-200/50 dark:border-white/20 shadow-md">
+                    <div className="flex items-center justify-between w-full">
+                      {/* Left Side - Icon and Text */}
+                      <div className="flex items-center space-x-3">
+                        {/* Back Button */}
+                        <motion.button
+                          onClick={() => router.back()}
+                          className="w-10 h-10 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}>
+                          <ArrowLeft className="w-5 h-5" />
+                        </motion.button>
+
+                        <motion.div
+                          className={`w-10 h-10 ${topic.bgColor} rounded-lg flex items-center justify-center ${topic.color}`}
+                          whileHover={{ rotate: 5, scale: 1.05 }}
+                          transition={{ duration: 0.3 }}>
+                          {topic.icon}
+                        </motion.div>
+                        <div>
+                          <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+                            {topic.title} Interview Questions
+                          </h1>
+                          <p className="text-xs text-gray-600 dark:text-gray-300">
+                            {topic.description}
+                          </p>
                         </div>
                       </div>
-                      <div className="absolute inset-0 w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full opacity-20 animate-pulse"></div>
-                    </div>
 
-                    {/* Compact Stats - Horizontal */}
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center space-x-1">
-                        <Clock className="w-3 h-3 text-blue-600" />
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {topic.duration}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Users className="w-3 h-3 text-green-600" />
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {topic.participants.toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <Star className="w-3 h-3 text-yellow-600" />
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {topic.rating}/5.0
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-1">
-                        <BookOpen className="w-3 h-3 text-purple-600" />
-                        <span className="text-xs text-gray-600 dark:text-gray-400">
-                          {topic.questions.length}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
-              {/* Left Sidebar - Questions (Wider) */}
-              <div className="lg:col-span-2">
-                <motion.div
-                  initial={{ opacity: 0, x: -30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.8, delay: 0.2 }}
-                  className="bg-white/80 dark:bg-white/10 rounded-2xl p-6 backdrop-blur-sm border border-gray-200/50 dark:border-white/20 shadow-lg sticky top-24">
-                  {/* Search Bar */}
-                  <div className="relative mb-6">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Search questions..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-3 bg-white/80 dark:bg-white/10 border border-gray-200/50 dark:border-white/20 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-sm"
-                    />
-                  </div>
-
-                  {/* Difficulty Tabs */}
-                  <div className="flex flex-row space-x-2 mb-6">
-                    {(["Beginner", "Intermediate", "Expert"] as const).map(
-                      (difficulty) => (
-                        <motion.button
-                          key={difficulty}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setSelectedDifficulty(difficulty)}
-                          className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 flex-1 border-2 ${
-                            selectedDifficulty === difficulty
-                              ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md border-blue-400"
-                              : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border-transparent hover:border-blue-200 dark:hover:border-blue-700"
-                          }`}>
-                          {difficulty}
-                        </motion.button>
-                      )
-                    )}
-                  </div>
-
-                  {/* Questions List */}
-                  <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar-thin">
-                    {filteredQuestions.map((question, index) => (
-                      <motion.button
-                        key={question.id}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ duration: 0.5, delay: 0.3 + index * 0.1 }}
-                        onClick={() => {
-                          setSelectedQuestion(question.id);
-                          scrollToQuestion(question.id);
-                        }}
-                        className={`w-full text-left p-3 rounded-lg transition-all duration-200 border-2 ${
-                          selectedQuestion === question.id
-                            ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md border-blue-400"
-                            : "hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border-transparent hover:border-blue-200 dark:hover:border-blue-700"
-                        }`}>
-                        <div className="flex items-start space-x-3">
-                          <div
-                            className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-200 ${
-                              selectedQuestion === question.id
-                                ? "bg-white/20 scale-110"
-                                : "bg-gray-100 dark:bg-gray-700 hover:scale-105"
-                            }`}>
-                            <span
-                              className={`text-xs font-bold ${
-                                selectedQuestion === question.id
-                                  ? "text-white"
-                                  : "text-gray-600 dark:text-gray-300"
-                              }`}>
-                              {index + 1}
+                      {/* Right Side - Progress and Stats */}
+                      <div className="flex items-center space-x-4">
+                        {/* Compact Stats - Horizontal */}
+                        <div className="flex items-center space-x-3">
+                          <div className="flex items-center space-x-1">
+                            <Clock className="w-3 h-3 text-blue-600" />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              {topic.duration}
                             </span>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium leading-tight line-clamp-3">
-                              {question.title}
-                            </div>
-                            {completedQuestions.has(question.id) && (
-                              <div className="flex items-center mt-1">
-                                <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
-                                <span className="text-xs text-green-600 dark:text-green-400">
-                                  Completed
-                                </span>
-                              </div>
-                            )}
+                          <div className="flex items-center space-x-1">
+                            <Users className="w-3 h-3 text-green-600" />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              {topic.participants.toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <Star className="w-3 h-3 text-yellow-600" />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              {topic.rating}/5.0
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-1">
+                            <BookOpen className="w-3 h-3 text-purple-600" />
+                            <span className="text-xs text-gray-600 dark:text-gray-400">
+                              {topic.questions.length}
+                            </span>
                           </div>
                         </div>
-                      </motion.button>
-                    ))}
+
+                        {/* Progress Circle - Even Smaller */}
+                        <div className="relative">
+                          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
+                            <div className="w-9 h-9 bg-white dark:bg-slate-800 rounded-full flex items-center justify-center">
+                              <span className="text-xs font-bold text-gray-900 dark:text-white">
+                                {getProgressPercentage()}%
+                              </span>
+                            </div>
+                          </div>
+                          <div className="absolute inset-0 w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full opacity-20 animate-pulse"></div>
+                        </div>
+
+                        {/* Focus Mode Button */}
+                        <motion.button
+                          onClick={() => setIsFocusMode(!isFocusMode)}
+                          className="w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-lg flex items-center justify-center transition-all duration-200"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          title="Enter Focus Mode">
+                          <Maximize2 className="w-5 h-5" />
+                        </motion.button>
+                      </div>
+                    </div>
                   </div>
                 </motion.div>
-              </div>
+              )}
+            </AnimatePresence>
+
+            {/* Main Content Grid */}
+            <div
+              className={`grid ${
+                isFocusMode
+                  ? "grid-cols-1 h-[calc(100vh-32px)]"
+                  : "grid-cols-1 lg:grid-cols-7 gap-4"
+              }`}>
+              {/* Left Sidebar - Questions (Hidden in focus mode) */}
+              <AnimatePresence>
+                {!isFocusMode && (
+                  <motion.div
+                    initial={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -30 }}
+                    transition={{ duration: 0.3 }}
+                    className="lg:col-span-2">
+                    <motion.div
+                      initial={{ opacity: 0, x: -30 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ duration: 0.8, delay: 0.2 }}
+                      className="bg-white/80 dark:bg-white/10 rounded-2xl p-6 backdrop-blur-sm border border-gray-200/50 dark:border-white/20 shadow-lg sticky top-24">
+                      {/* Search Bar */}
+                      <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="text"
+                          placeholder="Search questions..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-3 bg-white/80 dark:bg-white/10 border border-gray-200/50 dark:border-white/20 rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300 text-sm"
+                        />
+                      </div>
+
+                      {/* Difficulty Tabs */}
+                      <div className="flex flex-row space-x-2 mb-6">
+                        {(["Beginner", "Intermediate", "Expert"] as const).map(
+                          (difficulty) => (
+                            <motion.button
+                              key={difficulty}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={() => setSelectedDifficulty(difficulty)}
+                              className={`px-4 py-2.5 rounded-lg text-xs font-medium transition-all duration-200 flex-1 border-2 ${
+                                selectedDifficulty === difficulty
+                                  ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md border-blue-400"
+                                  : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 border-transparent hover:border-blue-200 dark:hover:border-blue-700"
+                              }`}>
+                              {difficulty}
+                            </motion.button>
+                          )
+                        )}
+                      </div>
+
+                      {/* Questions List */}
+                      <div className="space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar-thin pr-2">
+                        {filteredQuestions.map((question, index) => (
+                          <motion.button
+                            key={question.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{
+                              duration: 0.5,
+                              delay: 0.3 + index * 0.1,
+                            }}
+                            onClick={() => {
+                              // Update selected question immediately for sidebar highlighting
+                              setSelectedQuestion(question.id);
+                              // Scroll to the question smoothly
+                              scrollToQuestion(question.id);
+                            }}
+                            className={`w-full text-left p-3 rounded-lg transition-all duration-200 border-2 ${
+                              selectedQuestion === question.id
+                                ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md border-blue-400"
+                                : "hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border-transparent hover:border-blue-200 dark:hover:border-blue-700"
+                            }`}>
+                            <div className="flex items-start space-x-3">
+                              <div
+                                className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-200 ${
+                                  selectedQuestion === question.id
+                                    ? "bg-white/20 scale-110"
+                                    : "bg-gray-100 dark:bg-gray-700 hover:scale-105"
+                                }`}>
+                                <span
+                                  className={`text-xs font-bold ${
+                                    selectedQuestion === question.id
+                                      ? "text-white"
+                                      : "text-gray-600 dark:text-gray-300"
+                                  }`}>
+                                  {index + 1}
+                                </span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-medium leading-tight line-clamp-3">
+                                  {question.title}
+                                </div>
+                                {completedQuestions.has(question.id) && (
+                                  <div className="flex items-center mt-1">
+                                    <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
+                                    <span className="text-xs text-green-600 dark:text-green-400">
+                                      Completed
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* Right Pane - All Questions Scrollable */}
-              <div className="lg:col-span-5">
+              <div className={isFocusMode ? "col-span-1" : "lg:col-span-5"}>
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.5 }}
-                  className="bg-white/80 dark:bg-white/10 rounded-2xl backdrop-blur-sm border border-gray-200/50 dark:border-white/20 shadow-lg">
+                  className={`${
+                    isFocusMode
+                      ? "h-full bg-white/80 dark:bg-white/10 rounded-none border-0 shadow-none"
+                      : "bg-white/80 dark:bg-white/10 rounded-2xl backdrop-blur-sm border border-gray-200/50 dark:border-white/20 shadow-lg"
+                  }`}>
                   {/* Questions Container with Scroll */}
                   <div
-                    className="max-h-[800px] overflow-y-auto custom-scrollbar p-8"
+                    className={`overflow-y-auto custom-scrollbar ${
+                      isFocusMode ? "h-full p-4" : "p-8 max-h-[800px]"
+                    }`}
                     onScroll={(e) => {
                       const container = e.currentTarget;
+
+                      // Only update selection if not during programmatic scroll
+                      if (isProgrammaticScroll) return;
+
                       const questions =
                         container.querySelectorAll('[id^="question-"]');
 
@@ -976,13 +1093,6 @@ console.log('End');
                           relativeTop <= containerHeight * 0.8
                         ) {
                           setSelectedQuestion(questionId);
-
-                          // Auto-complete when scrolled to (for all questions)
-                          if (!completedQuestions.has(questionId)) {
-                            setTimeout(() => {
-                              toggleQuestionCompletion(questionId);
-                            }, 1500); // Slightly longer delay for better UX
-                          }
                         }
                       });
                     }}>
@@ -992,7 +1102,9 @@ console.log('End');
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.5, delay: index * 0.1 }}
-                        className={`mb-6 p-4 rounded-lg transition-all duration-300 ${
+                        className={`${
+                          isFocusMode ? "mb-4" : "mb-6"
+                        } p-4 rounded-lg transition-all duration-300 ${
                           selectedQuestion === question.id
                             ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-800"
                             : "bg-gray-50/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-white/20"
@@ -1095,33 +1207,6 @@ console.log('End');
                             )}
                           </div>
                         )}
-
-                        {/* Progress Indicator */}
-                        <div className="pt-4 border-t border-gray-200/50 dark:border-white/20">
-                          <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-                            <span>
-                              Question {index + 1} of {filteredQuestions.length}
-                            </span>
-                            <span className="text-blue-600 dark:text-blue-400 font-medium">
-                              {Math.round(
-                                ((index + 1) / filteredQuestions.length) * 100
-                              )}
-                              % Complete
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 mt-2">
-                            <motion.div
-                              className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full"
-                              initial={{ width: 0 }}
-                              animate={{
-                                width: `${
-                                  ((index + 1) / filteredQuestions.length) * 100
-                                }%`,
-                              }}
-                              transition={{ duration: 0.8, delay: 0.5 }}
-                            />
-                          </div>
-                        </div>
                       </motion.div>
                     ))}
                   </div>
@@ -1131,8 +1216,29 @@ console.log('End');
           </div>
         </main>
 
-        <Footer />
-        <FloatingActionButton />
+        {/* Footer - Hidden in focus mode */}
+        <AnimatePresence>
+          {!isFocusMode && (
+            <motion.div
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}>
+              <Footer />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Floating Action Button - Hidden in focus mode */}
+        <AnimatePresence>
+          {!isFocusMode && (
+            <motion.div
+              initial={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}>
+              <FloatingActionButton />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </>
   );

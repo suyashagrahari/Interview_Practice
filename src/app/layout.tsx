@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { Toaster } from "sonner";
+// import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 
 const inter = Inter({
@@ -101,7 +101,7 @@ export default function RootLayout({
           disableTransitionOnChange>
           <AuthProvider>
             {children}
-            <Toaster
+            {/* <Toaster
               position="top-right"
               toastOptions={{
                 duration: 4000,
@@ -111,7 +111,7 @@ export default function RootLayout({
                   border: "1px solid hsl(var(--border))",
                 },
               }}
-            />
+            /> */}
           </AuthProvider>
         </ThemeProvider>
       </body>

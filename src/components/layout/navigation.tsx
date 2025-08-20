@@ -56,21 +56,21 @@ const Navigation = () => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className={cn(
-          "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+          "fixed top-0 left-0 right-0 z-50 transition-all duration-300 w-full",
           scrolled
             ? "bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-gray-200/20 dark:border-white/10 shadow-lg"
             : "bg-transparent"
         )}>
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
-            {/* Logo */}
+            {/* Logo - Left Corner */}
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ duration: 0.6 }}
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="flex items-center space-x-2">
+              className="flex items-center space-x-2 flex-shrink-0">
               <div className="w-8 h-8 lg:w-10 lg:h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-lg lg:text-xl">
                   C
@@ -83,25 +83,27 @@ const Navigation = () => {
               </div>
             </motion.div>
 
-            {/* Desktop Navigation */}
-            <div className="hidden lg:flex items-center space-x-8">
-              {navItems.map((item, index) => (
-                <motion.a
-                  key={item.name}
-                  href={item.href}
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  whileHover={{ y: -2 }}
-                  className="text-gray-700 dark:text-white/80 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 font-medium relative group">
-                  {item.name}
-                  <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-500 dark:bg-blue-400 transition-all duration-300 group-hover:w-full"></span>
-                </motion.a>
-              ))}
+            {/* Desktop Navigation - Center */}
+            <div className="hidden lg:flex items-center justify-center flex-1 px-8">
+              <div className="flex items-center space-x-8">
+                {navItems.map((item, index) => (
+                  <motion.a
+                    key={item.name}
+                    href={item.href}
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.5, delay: index * 0.1 }}
+                    whileHover={{ y: -2 }}
+                    className="text-gray-700 dark:text-white/80 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 font-medium relative group">
+                    {item.name}
+                    <span className="absolute -bottom-1 left-0 w-0 h-0.5 bg-blue-500 dark:bg-blue-400 transition-all duration-300 group-hover:w-full"></span>
+                  </motion.a>
+                ))}
+              </div>
             </div>
 
-            {/* Right Side */}
-            <div className="flex items-center space-x-3">
+            {/* Right Side - Theme Toggle and Get Started */}
+            <div className="flex items-center space-x-3 flex-shrink-0">
               {/* Theme Toggle */}
               <motion.button
                 initial={{ opacity: 0, scale: 0.8 }}
@@ -161,7 +163,7 @@ const Navigation = () => {
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: 0.3, ease: "easeInOut" }}
                 className="lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-gray-200/20 dark:border-white/10">
-                <div className="container mx-auto px-4 py-6 space-y-4">
+                <div className="w-full px-4 py-6 space-y-4">
                   {/* Mobile Logo */}
                   <div className="flex items-center justify-center pb-4 border-b border-gray-200/20 dark:border-white/10">
                     <div className="flex items-center space-x-2">
