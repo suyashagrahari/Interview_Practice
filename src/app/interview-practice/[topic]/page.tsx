@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuestions } from "@/hooks/useQuestions";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
@@ -19,7 +20,7 @@ import {
   Maximize2,
   X,
 } from "lucide-react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Navigation from "@/components/layout/navigation";
 import Footer from "@/components/layout/footer";
 import FloatingActionButton from "@/components/ui/floating-action-button";
@@ -103,12 +104,15 @@ interface TopicContent {
 }
 
 const TopicPage = () => {
-  const params = useParams();
   const router = useRouter();
   const [topic, setTopic] = useState<TopicContent | null>(null);
+  const [technologyData, setTechnologyData] = useState<any>(null);
+  const [isLoadingTechnology, setIsLoadingTechnology] = useState(false);
   const [selectedDifficulty, setSelectedDifficulty] = useState<
     "Beginner" | "Intermediate" | "Expert"
   >("Beginner");
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [isLoadingFromURL, setIsLoadingFromURL] = useState(false);
   const [selectedQuestion, setSelectedQuestion] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [completedQuestions, setCompletedQuestions] = useState<Set<string>>(
@@ -118,548 +122,373 @@ const TopicPage = () => {
   const [isFocusMode, setIsFocusMode] = useState(false);
   // Removed toast state and helpers
 
-  const topicsData: Record<string, TopicContent> = {
-    javascript: {
-      id: "javascript",
-      title: "JavaScript",
-      description:
-        "Master the fundamentals and advanced concepts of JavaScript programming language.",
-      icon: <Code className="w-8 h-8" />,
-      color: "text-orange-500",
-      bgColor: "bg-orange-100 dark:bg-orange-900/20",
-      category: "frontend",
-      difficulty: "Beginner",
-      duration: "8-12 hours",
-      participants: 15420,
-      rating: 4.8,
-      questions: [
-        {
-          id: "js-1",
-          title: "What is JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "JavaScript is a high-level, interpreted programming language primarily used for creating interactive effects within web browsers. It allows developers to add dynamic behavior to web pages, handle events, manipulate the DOM, and communicate with servers. JavaScript is also used in server-side development (Node.js), mobile app development, and game development.",
-          keyPoints: [
-            "Versatile language for front-end and back-end development",
-            "Dynamically typed with runtime type checking",
-            "Object-oriented programming support",
-            "Rich ecosystem of libraries and frameworks",
-          ],
-          example: "alert('Hello, World!');",
-          explanation:
-            "This code will display a popup box with the message 'Hello, World!' when the web page is loaded.",
-        },
-        {
-          id: "js-2",
-          title: "What are variables in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Variables in JavaScript are containers for storing data values. They are declared using keywords like 'var', 'let', or 'const'. Variables can hold different types of data including numbers, strings, booleans, objects, and functions. They provide a way to store and manipulate data throughout your program.",
-          keyPoints: [
-            "Variables store data values",
-            "Three declaration keywords: var, let, const",
-            "Can hold different data types",
-            "Provide data persistence and manipulation",
-          ],
-          example: `let name = "John";
-const age = 25;
-var isStudent = true;`,
-          explanation:
-            "This example shows three different ways to declare variables: 'let' for mutable values, 'const' for constants, and 'var' for function-scoped variables.",
-        },
-        {
-          id: "js-3",
-          title: "What are data types in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "JavaScript has several primitive data types: Number (integers and decimals), String (text), Boolean (true/false), Undefined (variable declared but not assigned), Null (intentional absence of value), Symbol (unique identifier), and BigInt (large integers). JavaScript also has reference types like Object, Array, and Function.",
-          keyPoints: [
-            "Primitive types: Number, String, Boolean, Undefined, Null, Symbol, BigInt",
-            "Reference types: Object, Array, Function",
-            "Dynamically typed language",
-            "Type checking at runtime",
-          ],
-          example: `let number = 42;
-let text = "Hello World";
-let boolean = true;
-let array = [1, 2, 3];
-let object = { name: "John", age: 25 };`,
-          explanation:
-            "This example demonstrates different data types in JavaScript, showing how variables can hold various types of values.",
-        },
-        {
-          id: "js-4",
-          title: "What are functions in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Functions in JavaScript are reusable blocks of code that perform specific tasks. They can take parameters (input) and return values (output). Functions help organize code, avoid repetition, and make programs more modular. They can be declared using function declarations, function expressions, or arrow functions.",
-          keyPoints: [
-            "Reusable blocks of code",
-            "Can take parameters and return values",
-            "Help organize and modularize code",
-            "Multiple declaration syntaxes available",
-          ],
-          example: `function greet(name) {
-  return "Hello, " + name + "!";
-}
-
-const greetArrow = (name) => "Hello, " + name + "!";
-
-console.log(greet("John")); // Hello, John!
-console.log(greetArrow("Jane")); // Hello, Jane!`,
-          explanation:
-            "This shows two ways to create functions: traditional function declaration and modern arrow function syntax.",
-        },
-        {
-          id: "js-5",
-          title: "What are arrays in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Arrays in JavaScript are ordered collections of values that can hold multiple items of any data type. They are zero-indexed, meaning the first element is at index 0. Arrays provide many built-in methods for manipulation like push(), pop(), shift(), unshift(), and more. They are commonly used for storing lists of data.",
-          keyPoints: [
-            "Ordered collections of values",
-            "Zero-indexed (start at position 0)",
-            "Can hold mixed data types",
-            "Many built-in methods for manipulation",
-          ],
-          example: `let fruits = ["apple", "banana", "orange"];
-fruits.push("grape"); // Add to end
-fruits.pop(); // Remove from end
-console.log(fruits[0]); // apple`,
-          explanation:
-            "This example shows basic array operations: creating an array, adding elements, removing elements, and accessing elements by index.",
-        },
-        {
-          id: "js-6",
-          title: "What are objects in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Objects in JavaScript are collections of key-value pairs where keys are strings (or symbols) and values can be any data type. They are used to represent real-world entities and group related data and functionality together. Objects can have properties (data) and methods (functions).",
-          keyPoints: [
-            "Collections of key-value pairs",
-            "Keys are strings or symbols",
-            "Values can be any data type",
-            "Can have properties and methods",
-          ],
-          example: `let person = {
-  name: "John",
-  age: 30,
-  greet: function() {
-    return "Hello, I'm " + this.name;
-  }
-};
-
-console.log(person.name); // John
-console.log(person.greet()); // Hello, I'm John`,
-          explanation:
-            "This object has properties (name, age) and a method (greet function) that can access the object's properties using 'this'.",
-        },
-        {
-          id: "js-7",
-          title: "What is the difference between == and ===?",
-          difficulty: "Beginner",
-          answer:
-            "The == operator performs type coercion before comparison, while === (strict equality) checks both value and type without coercion. === is generally preferred as it's more predictable and prevents unexpected type conversions that can lead to bugs. Always use === unless you specifically need type coercion.",
-          keyPoints: [
-            "== performs type coercion",
-            "=== checks value and type strictly",
-            "=== is more predictable and safer",
-            "Use === for most comparisons",
-          ],
-          example: `5 == '5';   // true (type coercion)
-5 === '5';  // false (different types)
-null == undefined;  // true
-null === undefined; // false`,
-          explanation:
-            "The == operator converts the string '5' to a number before comparison, while === requires both value and type to match exactly.",
-        },
-        {
-          id: "js-8",
-          title: "What are conditional statements?",
-          difficulty: "Beginner",
-          answer:
-            "Conditional statements in JavaScript allow you to execute different blocks of code based on whether certain conditions are true or false. The main conditional statements are 'if', 'else if', and 'else'. They use comparison operators and logical operators to evaluate conditions and control program flow.",
-          keyPoints: [
-            "Control program flow based on conditions",
-            "Use if, else if, and else keywords",
-            "Evaluate boolean expressions",
-            "Can be nested for complex logic",
-          ],
-          example: `let age = 18;
-
-if (age >= 18) {
-  console.log("You are an adult");
-} else if (age >= 13) {
-  console.log("You are a teenager");
-} else {
-  console.log("You are a child");
-}`,
-          explanation:
-            "This example shows how conditional statements can check different age ranges and execute different code based on the condition.",
-        },
-        {
-          id: "js-9",
-          title: "What are loops in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Loops in JavaScript are used to execute a block of code multiple times. The main types are 'for' loops (when you know the number of iterations), 'while' loops (when you don't know the number of iterations), and 'do-while' loops (execute at least once). Loops are essential for processing arrays and repeating operations.",
-          keyPoints: [
-            "Execute code blocks multiple times",
-            "For loops for known iterations",
-            "While loops for unknown iterations",
-            "Essential for array processing",
-          ],
-          example: `// For loop
-for (let i = 0; i < 5; i++) {
-  console.log("Count: " + i);
-}
-
-// While loop
-let count = 0;
-while (count < 3) {
-  console.log("Count: " + count);
-  count++;
-}`,
-          explanation:
-            "The for loop runs exactly 5 times, while the while loop continues until the condition becomes false.",
-        },
-        {
-          id: "js-10",
-          title: "What is scope in JavaScript?",
-          difficulty: "Beginner",
-          answer:
-            "Scope in JavaScript determines the accessibility of variables, functions, and objects in different parts of your code. There are three main types: Global scope (accessible everywhere), Function scope (accessible within a function), and Block scope (accessible within blocks like if statements, loops). Understanding scope is crucial for avoiding variable conflicts.",
-          keyPoints: [
-            "Determines variable accessibility",
-            "Global, function, and block scope",
-            "Variables declared with 'let' and 'const' are block-scoped",
-            "Variables declared with 'var' are function-scoped",
-          ],
-          example: `let globalVar = "I'm global";
-
-function myFunction() {
-  let functionVar = "I'm function-scoped";
-  if (true) {
-    let blockVar = "I'm block-scoped";
-    console.log(blockVar); // Works
-  }
-  // console.log(blockVar); // Error - not accessible
-}`,
-          explanation:
-            "This demonstrates different scopes: globalVar is accessible everywhere, functionVar only in the function, and blockVar only in the if block.",
-        },
-      ],
-    },
-    react: {
-      id: "react",
-      title: "React",
-      description:
-        "Build dynamic and interactive user interfaces with React library.",
-      icon: <Code className="w-8 h-8" />,
-      color: "text-blue-500",
-      bgColor: "bg-blue-100 dark:bg-blue-900/20",
-      category: "frontend",
-      difficulty: "Intermediate",
-      duration: "10-15 hours",
-      participants: 12850,
-      rating: 4.9,
-      questions: [
-        {
-          id: "react-1",
-          title: "What is React and why use it?",
-          difficulty: "Beginner",
-          answer:
-            "React is a JavaScript library for building user interfaces, particularly single-page applications. It's used for handling the view layer and can be used for developing both web and mobile applications. React allows developers to create large web applications that can change data without reloading the page.",
-          keyPoints: [
-            "Component-based architecture",
-            "Virtual DOM for performance",
-            "Unidirectional data flow",
-            "Large ecosystem and community",
-          ],
-          example: `function Welcome() {
-  return <h1>Hello, React!</h1>;
-}`,
-          explanation:
-            "This is a simple React functional component that returns JSX to render a heading element.",
-        },
-        {
-          id: "react-2",
-          title: "What are React components?",
-          difficulty: "Beginner",
-          answer:
-            "React components are reusable pieces of UI that can be composed together to build complex interfaces. Components can be functional (using functions) or class-based (using classes). They accept props as input and return JSX to describe what should appear on the screen. Components help organize code and make it more maintainable.",
-          keyPoints: [
-            "Reusable pieces of UI",
-            "Can be functional or class-based",
-            "Accept props as input",
-            "Return JSX for rendering",
-          ],
-          example: `function Greeting(props) {
-  return <h1>Hello, {props.name}!</h1>;
-}
-
-// Usage
-<Greeting name="John" />`,
-          explanation:
-            "This functional component takes a 'name' prop and renders a personalized greeting message.",
-        },
-        {
-          id: "react-3",
-          title: "What is JSX in React?",
-          difficulty: "Beginner",
-          answer:
-            "JSX (JavaScript XML) is a syntax extension for JavaScript that allows you to write HTML-like code within JavaScript. It makes React components more readable and easier to write. JSX gets transformed into regular JavaScript function calls during the build process. It allows you to embed expressions, use attributes, and nest elements just like HTML.",
-          keyPoints: [
-            "JavaScript XML syntax extension",
-            "HTML-like syntax in JavaScript",
-            "Gets transformed to JavaScript",
-            "Allows embedding expressions",
-          ],
-          example: `const name = "John";
-const element = <h1>Hello, {name}!</h1>;
-
-// JSX with attributes
-const button = <button className="btn" onClick={handleClick}>Click me</button>;`,
-          explanation:
-            "JSX allows you to mix JavaScript expressions with HTML-like syntax, making it easy to create dynamic content.",
-        },
-        {
-          id: "react-4",
-          title: "What are React props?",
-          difficulty: "Beginner",
-          answer:
-            "Props (short for properties) are a way to pass data from parent components to child components in React. They are read-only and help make components reusable and configurable. Props can be any type of data: strings, numbers, arrays, objects, or even functions. They are passed down the component tree and cannot be modified by the receiving component.",
-          keyPoints: [
-            "Pass data between components",
-            "Read-only (immutable)",
-            "Make components reusable",
-            "Can be any data type",
-          ],
-          example: `function UserCard(props) {
-  return (
-    <div className="user-card">
-      <h2>{props.name}</h2>
-      <p>Age: {props.age}</p>
-      <p>Email: {props.email}</p>
-    </div>
-  );
-}
-
-// Usage
-<UserCard name="John" age={25} email="john@example.com" />`,
-          explanation:
-            "Props allow the parent component to customize how the UserCard component is displayed with different data.",
-        },
-        {
-          id: "react-5",
-          title: "What is React state?",
-          difficulty: "Beginner",
-          answer:
-            "State in React is a way to store data that can change over time and affects how a component renders. When state changes, the component re-renders to reflect the new data. State is managed within the component and can be updated using setter functions. It's essential for creating interactive components that respond to user actions.",
-          keyPoints: [
-            "Stores changeable data",
-            "Triggers re-renders when updated",
-            "Managed within component",
-            "Updated with setter functions",
-          ],
-          example: `function Counter() {
-  const [count, setCount] = useState(0);
-  
-  return (
-    <div>
-      <p>Count: {count}</p>
-      <button onClick={() => setCount(count + 1)}>
-        Increment
-      </button>
-    </div>
-  );
-}`,
-          explanation:
-            "The count state starts at 0 and increases each time the button is clicked, causing the component to re-render with the new value.",
-        },
-        {
-          id: "react-6",
-          title: "Explain React Hooks",
-          difficulty: "Intermediate",
-          answer:
-            "React Hooks are functions that allow you to use state and other React features in functional components. They were introduced in React 16.8 to allow you to use state and lifecycle methods without writing a class component. Common hooks include useState, useEffect, useContext, and useReducer.",
-          keyPoints: [
-            "Only call hooks at the top level",
-            "Only call hooks from React functions",
-            "Hooks must be called in the same order",
-            "Custom hooks must start with 'use'",
-          ],
-          example: `function Counter() {
-  const [count, setCount] = useState(0);
-  
-  useEffect(() => {
-    document.title = \`Count: \${count}\`;
-  }, [count]);
-  
-  return (
-    <button onClick={() => setCount(count + 1)}>
-      Count: {count}
-    </button>
-  );
-}`,
-          explanation:
-            "useState manages the count state, and useEffect updates the document title whenever count changes.",
-        },
-      ],
-    },
-    nodejs: {
-      id: "nodejs",
-      title: "Node.js",
-      description:
-        "Develop scalable and efficient server-side applications with Node.js runtime.",
-      icon: <Code className="w-8 h-8" />,
-      color: "text-green-500",
-      bgColor: "bg-green-100 dark:bg-green-900/20",
-      category: "backend",
-      difficulty: "Intermediate",
-      duration: "12-18 hours",
-      participants: 9850,
-      rating: 4.7,
-      questions: [
-        {
-          id: "node-1",
-          title: "What is Node.js?",
-          difficulty: "Beginner",
-          answer:
-            "Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. It allows developers to run JavaScript on the server-side, enabling the development of scalable network applications. Node.js uses an event-driven, non-blocking I/O model that makes it lightweight and efficient.",
-          keyPoints: [
-            "JavaScript runtime on server-side",
-            "Event-driven and non-blocking I/O",
-            "Built on V8 engine",
-            "Large package ecosystem (npm)",
-          ],
-          example: `const http = require('http');
-
-const server = http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('Hello World\n');
-});
-
-server.listen(3000, () => {
-  console.log('Server running at http://localhost:3000/');
-});`,
-          explanation:
-            "This creates a simple HTTP server that responds with 'Hello World' to all requests on port 3000.",
-        },
-        {
-          id: "node-2",
-          title: "What is npm in Node.js?",
-          difficulty: "Beginner",
-          answer:
-            "npm (Node Package Manager) is the default package manager for Node.js. It allows developers to install, update, and manage JavaScript packages and dependencies for their projects. npm provides access to the world's largest software registry and helps manage project dependencies efficiently.",
-          keyPoints: [
-            "Default package manager for Node.js",
-            "Installs and manages dependencies",
-            "Largest software registry",
-            "Manages project packages",
-          ],
-          example: `# Install a package
-npm install express
-
-# Install as dev dependency
-npm install --save-dev nodemon
-
-# Initialize a new project
-npm init`,
-          explanation:
-            "npm commands help manage packages: install for dependencies, --save-dev for development tools, and init to create package.json.",
-        },
-        {
-          id: "node-3",
-          title: "What is package.json?",
-          difficulty: "Beginner",
-          answer:
-            "package.json is a configuration file that contains metadata about a Node.js project. It includes information like project name, version, description, dependencies, scripts, and other project settings. This file is essential for Node.js projects as it defines how the project should be built, what dependencies it needs, and how to run it.",
-          keyPoints: [
-            "Project configuration file",
-            "Contains metadata and dependencies",
-            "Defines project scripts",
-            "Essential for Node.js projects",
-          ],
-          example: `{
-  "name": "my-project",
-  "version": "1.0.0",
-  "description": "A sample Node.js project",
-  "main": "index.js",
-  "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
-  },
-  "dependencies": {
-    "express": "^4.17.1"
-  }
-}`,
-          explanation:
-            "This package.json defines project details, scripts for running the app, and lists Express as a dependency.",
-        },
-        {
-          id: "node-4",
-          title: "What are modules in Node.js?",
-          difficulty: "Beginner",
-          answer:
-            "Modules in Node.js are reusable pieces of code that can be imported and used in other files. They help organize code by separating functionality into different files. Node.js uses the CommonJS module system where you can export code using module.exports and import it using require(). This modular approach makes code more maintainable and reusable.",
-          keyPoints: [
-            "Reusable pieces of code",
-            "Separate functionality into files",
-            "Use CommonJS module system",
-            "Export with module.exports",
-          ],
-          example: `// math.js
-module.exports = {
-  add: (a, b) => a + b,
-  subtract: (a, b) => a - b
-};
-
-// app.js
-const math = require('./math');
-console.log(math.add(5, 3)); // 8`,
-          explanation:
-            "The math module exports functions that can be imported and used in other files using require().",
-        },
-        {
-          id: "node-5",
-          title: "What is the event loop in Node.js?",
-          difficulty: "Beginner",
-          answer:
-            "The event loop is a mechanism that allows Node.js to perform non-blocking I/O operations despite being single-threaded. It continuously processes events from the event queue and executes callbacks. The event loop handles operations like file I/O, network requests, and timers asynchronously, making Node.js efficient for I/O-intensive applications.",
-          keyPoints: [
-            "Enables non-blocking operations",
-            "Single-threaded execution",
-            "Processes events asynchronously",
-            "Handles I/O operations efficiently",
-          ],
-          example: `console.log('Start');
-
-setTimeout(() => {
-  console.log('Timer callback');
-}, 1000);
-
-console.log('End');
-
-// Output: Start, End, Timer callback (after 1 second)`,
-          explanation:
-            "The event loop processes the timer callback asynchronously, allowing other code to execute while waiting.",
-        },
-      ],
-    },
+  // Static data for all technologies
+  const staticTopicData = {
+    icon: <Code className="w-8 h-8" />,
+    color: "text-blue-500",
+    bgColor: "bg-blue-100 dark:bg-blue-900/20",
+    duration: "10-15 hours",
+    participants: 12850,
+    rating: 4.9,
+    questions: [],
   };
 
+  // Get the topic from URL params
+  const urlParams = useParams();
+  const searchParams = useSearchParams();
+  const topicSlug = urlParams.topic as string;
+  const questionSlug = urlParams.question as string;
+  const questionFromQuery = searchParams.get("question");
+
+  // Log the technology slug being used
   useEffect(() => {
-    const topicId = params.topic as string;
-    if (topicsData[topicId]) {
-      const topicData = topicsData[topicId];
-      setTopic(topicData);
-      // Set first question as selected
-      if (topicData.questions.length > 0) {
-        setSelectedQuestion(topicData.questions[0].id);
+    console.log("🔗 Technology slug from URL:", topicSlug);
+    console.log("🔗 Question slug from URL:", questionSlug);
+    console.log("🔗 Question from query:", questionFromQuery);
+    console.log("🔗 Full URL params:", urlParams);
+    console.log("🔗 Search params:", searchParams.toString());
+  }, [topicSlug, questionSlug, questionFromQuery, urlParams, searchParams]);
+
+  // Use the custom hook for questions - initially fetch all questions to determine difficulty
+  const {
+    questions: apiQuestions,
+    isLoading: isLoadingQuestions,
+    error: questionsError,
+    hasMore,
+    loadMore,
+    currentPage,
+    totalPages,
+    totalCount,
+  } = useQuestions({
+    technology: topicSlug,
+    level: isInitialLoad ? undefined : selectedDifficulty, // Don't filter by level on initial load
+    pageSize: 25,
+    sort: "order:asc",
+  });
+
+  // Fetch technology data from API
+  useEffect(() => {
+    const fetchTechnologyData = async () => {
+      if (!topicSlug) return;
+
+      setIsLoadingTechnology(true);
+      try {
+        const response = await fetch(
+          `http://localhost:1337/api/technologies?filters[slug][$eq]=${topicSlug}&populate=category`
+        );
+        const data = await response.json();
+        if (data.data && data.data.length > 0) {
+          setTechnologyData(data.data[0]);
+          console.log("🔧 Technology data from API:", data.data[0]);
+        }
+      } catch (error) {
+        console.error("Error fetching technology data:", error);
+      } finally {
+        setIsLoadingTechnology(false);
+      }
+    };
+
+    fetchTechnologyData();
+  }, [topicSlug]);
+
+  // Function to update URL with question slug
+  const updateQuestionURL = useCallback(
+    (questionId: string) => {
+      const question = apiQuestions.find((q) => q.id.toString() === questionId);
+      if (question && question.slug) {
+        const newUrl = `/interview-practice/${topicSlug}/${question.slug}`;
+        window.history.pushState({}, "", newUrl);
+        console.log("🔗 URL updated to:", newUrl);
+      }
+    },
+    [apiQuestions, topicSlug]
+  );
+
+  // Handle URL changes to select correct question and set difficulty level
+  useEffect(() => {
+    const targetQuestionSlug = questionSlug || questionFromQuery;
+
+    if (targetQuestionSlug && apiQuestions.length > 0) {
+      setIsLoadingFromURL(true);
+      const question = apiQuestions.find((q) => q.slug === targetQuestionSlug);
+      if (question) {
+        setSelectedQuestion(question.id.toString());
+        setSelectedDifficulty(
+          question.level as "Beginner" | "Intermediate" | "Expert"
+        );
+        setIsInitialLoad(false);
+        console.log("🔗 Question selected from URL:", question.slug);
+        console.log("🔗 Difficulty level set to:", question.level);
+
+        // If we came from a query parameter, update the URL to the proper format
+        if (questionFromQuery && !questionSlug) {
+          const newUrl = `/interview-practice/${topicSlug}/${question.slug}`;
+          window.history.replaceState({}, "", newUrl);
+          console.log("🔗 URL updated to proper format:", newUrl);
+        }
+
+        // Scroll to the question after a short delay to ensure it's rendered
+        setTimeout(() => {
+          const questionElement = document.getElementById(
+            `question-${question.id}`
+          );
+          if (questionElement) {
+            questionElement.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+            });
+            console.log("🔗 Scrolled to question from URL:", question.slug);
+          }
+          setIsLoadingFromURL(false);
+        }, 500);
+      } else {
+        setIsLoadingFromURL(false);
+      }
+    } else if (apiQuestions.length > 0 && isInitialLoad) {
+      // If no specific question in URL, set to first question and its difficulty
+      const firstQuestion = apiQuestions[0];
+      setSelectedQuestion(firstQuestion.id.toString());
+      setSelectedDifficulty(
+        firstQuestion.level as "Beginner" | "Intermediate" | "Expert"
+      );
+      setIsInitialLoad(false);
+      console.log(
+        "🔗 No specific question in URL, selecting first question:",
+        firstQuestion.slug
+      );
+      console.log("🔗 Difficulty level set to:", firstQuestion.level);
+    }
+  }, [questionSlug, questionFromQuery, apiQuestions, topicSlug, isInitialLoad]);
+
+  // Handle browser back/forward navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const currentPath = window.location.pathname;
+      const pathParts = currentPath.split("/");
+      const questionSlugFromPath = pathParts[pathParts.length - 1];
+      const currentSearchParams = new URLSearchParams(window.location.search);
+      const questionFromSearch = currentSearchParams.get("question");
+
+      const targetQuestionSlug =
+        questionSlugFromPath !== topicSlug
+          ? questionSlugFromPath
+          : questionFromSearch;
+
+      if (targetQuestionSlug) {
+        // Find question by slug and select it
+        const question = apiQuestions.find(
+          (q) => q.slug === targetQuestionSlug
+        );
+        if (question) {
+          setSelectedQuestion(question.id.toString());
+          console.log(
+            "🔗 Question selected from browser navigation:",
+            question.slug
+          );
+        }
+      } else {
+        // No question in URL, select first question
+        if (apiQuestions.length > 0) {
+          setSelectedQuestion(apiQuestions[0].id.toString());
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [apiQuestions, topicSlug]);
+
+  // Update meta tags for SEO when question changes
+  useEffect(() => {
+    if (selectedQuestion && apiQuestions.length > 0) {
+      const question = apiQuestions.find(
+        (q) => q.id.toString() === selectedQuestion
+      );
+      if (question) {
+        // Update document title
+        document.title = `${question.metaTitle || question.title} | ${
+          topic?.title || topicSlug
+        } Interview Questions`;
+
+        // Update meta description
+        const metaDescription = document.querySelector(
+          'meta[name="description"]'
+        );
+        if (metaDescription) {
+          metaDescription.setAttribute(
+            "content",
+            question.metaDescription || question.answer.substring(0, 160)
+          );
+        }
+
+        // Update Open Graph tags
+        const ogTitle = document.querySelector('meta[property="og:title"]');
+        if (ogTitle) {
+          ogTitle.setAttribute("content", question.metaTitle || question.title);
+        }
+
+        const ogDescription = document.querySelector(
+          'meta[property="og:description"]'
+        );
+        if (ogDescription) {
+          ogDescription.setAttribute(
+            "content",
+            question.metaDescription || question.answer.substring(0, 160)
+          );
+        }
+
+        console.log("🔍 SEO meta tags updated for question:", question.slug);
       }
     }
-  }, [params.topic]);
+  }, [selectedQuestion, apiQuestions, topic, topicSlug]);
+
+  // Log when difficulty level changes
+  useEffect(() => {
+    console.log("📊 Selected difficulty level:", selectedDifficulty);
+    console.log("📊 Fetching questions for:", {
+      technology: topicSlug,
+      level: selectedDifficulty,
+    });
+    console.log(
+      "📊 Available questions for this difficulty:",
+      apiQuestions.filter((q) => q.level === selectedDifficulty).length
+    );
+  }, [selectedDifficulty, topicSlug, apiQuestions]);
+
+  // Log the questions data when it changes
+  useEffect(() => {
+    if (apiQuestions.length > 0) {
+      console.log("=== QUESTIONS DATA ===");
+      console.log("Technology:", topicSlug);
+      console.log("Difficulty Level:", selectedDifficulty);
+      console.log("Questions data:", apiQuestions);
+      console.log("Total questions:", totalCount);
+      console.log("Current page:", currentPage);
+      console.log("Total pages:", totalPages);
+      console.log("Has more:", hasMore);
+
+      // Log detailed question information
+      apiQuestions.forEach((question, index) => {
+        console.log(`\n--- Question ${index + 1} ---`);
+        console.log("Title:", question.title);
+        console.log("Question:", question.question);
+        console.log("Answer:", question.answer);
+        console.log("Level:", question.level);
+        console.log("Order:", question.order);
+        console.log("View Count:", question.viewCount);
+        console.log("Is Featured:", question.isFeatured);
+        console.log("Technology:", question.technology.name);
+        console.log(
+          "Technology Category:",
+          question.technology.category?.name || "No category"
+        );
+        console.log("Author:", question.author.name);
+        console.log("Created At:", question.createdAt);
+        console.log("Updated At:", question.updatedAt);
+      });
+    }
+  }, [
+    apiQuestions,
+    totalCount,
+    currentPage,
+    totalPages,
+    hasMore,
+    topicSlug,
+    selectedDifficulty,
+  ]);
+
+  // Set first question as selected when API questions load or difficulty changes
+  useEffect(() => {
+    if (apiQuestions.length > 0) {
+      // If no question is selected or no question slug in URL, select first question
+      if (!selectedQuestion && !questionSlug && !questionFromQuery) {
+        setSelectedQuestion(apiQuestions[0].id.toString());
+        console.log("🎯 Auto-selecting first question:", apiQuestions[0].slug);
+      }
+    }
+  }, [apiQuestions, selectedQuestion, questionSlug, questionFromQuery]);
+
+  // Handle difficulty level changes - select first question of new difficulty
+  useEffect(() => {
+    if (
+      apiQuestions.length > 0 &&
+      !questionSlug &&
+      !questionFromQuery &&
+      !isInitialLoad
+    ) {
+      // Find first question of the current difficulty level
+      const firstQuestionOfDifficulty = apiQuestions.find(
+        (q) => q.level === selectedDifficulty
+      );
+      if (firstQuestionOfDifficulty) {
+        setSelectedQuestion(firstQuestionOfDifficulty.id.toString());
+        updateQuestionURL(firstQuestionOfDifficulty.id.toString());
+        console.log(
+          "🎯 Difficulty changed - selecting first question:",
+          firstQuestionOfDifficulty.slug
+        );
+      }
+    }
+  }, [
+    selectedDifficulty,
+    apiQuestions,
+    questionSlug,
+    questionFromQuery,
+    updateQuestionURL,
+    isInitialLoad,
+  ]);
+
+  // Infinite scroll functionality
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollContainer = document.querySelector(".custom-scrollbar");
+      if (!scrollContainer) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+      // Load more when user scrolls to 80% of the content
+      if (scrollPercentage > 0.8 && hasMore && !isLoadingQuestions) {
+        console.log("🔄 Loading more questions...");
+        console.log("📊 Current questions loaded:", apiQuestions.length);
+        console.log("📊 Total questions available:", totalCount);
+        console.log("📊 Current page:", currentPage);
+        console.log("📊 Has more pages:", hasMore);
+        loadMore();
+      }
+    };
+
+    const scrollContainer = document.querySelector(".custom-scrollbar");
+    if (scrollContainer) {
+      scrollContainer.addEventListener("scroll", handleScroll);
+      return () => scrollContainer.removeEventListener("scroll", handleScroll);
+    }
+  }, [hasMore, isLoadingQuestions, loadMore]);
+
+  // Set topic data combining API data with static data
+  useEffect(() => {
+    if (technologyData) {
+      const topicData: TopicContent = {
+        id: technologyData.slug,
+        title: technologyData.title,
+        description: technologyData.description,
+        icon: staticTopicData.icon,
+        color: staticTopicData.color,
+        bgColor: staticTopicData.bgColor,
+        category: technologyData.category?.slug || "general",
+        difficulty: technologyData.difficultyLevel as
+          | "Beginner"
+          | "Intermediate"
+          | "Advanced",
+        duration: staticTopicData.duration,
+        participants: staticTopicData.participants,
+        rating: staticTopicData.rating,
+        questions: staticTopicData.questions,
+      };
+      setTopic(topicData);
+      console.log("🎯 Combined topic data:", topicData);
+    }
+  }, [technologyData]);
 
   // Handle ESC key for focus mode
   useEffect(() => {
@@ -693,8 +522,14 @@ console.log('End');
         const viewportCenter = windowHeight / 2;
 
         // If question center is within 200px of viewport center, select it
-        if (Math.abs(questionCenter - viewportCenter) < 200) {
+        // But don't override if we're loading from URL
+        if (
+          Math.abs(questionCenter - viewportCenter) < 200 &&
+          !isLoadingFromURL
+        ) {
           setSelectedQuestion(questionId);
+          // Update URL with question slug
+          updateQuestionURL(questionId);
         }
       });
     };
@@ -711,7 +546,7 @@ console.log('End');
     // Fallback to window scroll if container not found
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [isLoadingFromURL, updateQuestionURL]);
 
   if (!topic) {
     return (
@@ -730,14 +565,17 @@ console.log('End');
     );
   }
 
-  const filteredQuestions = topic.questions.filter(
-    (q) =>
-      q.difficulty === selectedDifficulty &&
-      q.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter API questions based on difficulty and search query
+  const filteredQuestions = apiQuestions.filter((q) => {
+    const matchesDifficulty = isInitialLoad || q.level === selectedDifficulty;
+    const matchesSearch = q.title
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    return matchesDifficulty && matchesSearch;
+  });
 
-  const currentQuestion = topic.questions.find(
-    (q) => q.id === selectedQuestion
+  const currentQuestion = apiQuestions.find(
+    (q) => q.id.toString() === selectedQuestion
   );
 
   const toggleQuestionCompletion = (questionId: string) => {
@@ -780,7 +618,7 @@ console.log('End');
   };
 
   const getProgressPercentage = () => {
-    const totalQuestions = topic.questions.length;
+    const totalQuestions = apiQuestions.length;
     const completedCount = completedQuestions.size;
     return Math.round((completedCount / totalQuestions) * 100);
   };
@@ -821,6 +659,29 @@ console.log('End');
             isFocusMode ? "pb-0" : "pb-16"
           }`}>
           <div className={`w-full ${isFocusMode ? "px-0" : "px-0"}`}>
+            {/* Error Display for Questions */}
+            {questionsError && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mx-4 mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
+                <p className="text-red-600 dark:text-red-400 text-sm text-center">
+                  Failed to load questions: {questionsError}
+                </p>
+              </motion.div>
+            )}
+
+            {/* Loading State for Questions */}
+            {isLoadingQuestions && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mx-4 mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl">
+                <p className="text-blue-600 dark:text-blue-400 text-sm text-center">
+                  Loading questions for <strong>{topicSlug}</strong>...
+                </p>
+              </motion.div>
+            )}
             {/* Focus Mode Exit Button - Only visible in focus mode */}
             <AnimatePresence>
               {isFocusMode && (
@@ -872,10 +733,19 @@ console.log('End');
                         </motion.div>
                         <div>
                           <h1 className="text-lg font-bold text-gray-900 dark:text-white">
-                            {topic.title} Interview Questions
+                            {isLoadingTechnology ? (
+                              <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-5 w-32 rounded"></div>
+                            ) : (
+                              `${topic?.title || topicSlug} Interview Questions`
+                            )}
                           </h1>
                           <p className="text-xs text-gray-600 dark:text-gray-300">
-                            {topic.description}
+                            {isLoadingTechnology ? (
+                              <div className="animate-pulse bg-gray-300 dark:bg-gray-600 h-3 w-48 rounded mt-1"></div>
+                            ) : (
+                              topic?.description ||
+                              "Loading technology description..."
+                            )}
                           </p>
                         </div>
                       </div>
@@ -905,7 +775,8 @@ console.log('End');
                           <div className="flex items-center space-x-1">
                             <BookOpen className="w-3 h-3 text-purple-600" />
                             <span className="text-xs text-gray-600 dark:text-gray-400">
-                              {topic.questions.length}
+                              {apiQuestions.length}
+                              {totalCount > 0 && `/${totalCount}`}
                             </span>
                           </div>
                         </div>
@@ -1003,36 +874,40 @@ console.log('End');
                             }}
                             onClick={() => {
                               // Update selected question immediately for sidebar highlighting
-                              setSelectedQuestion(question.id);
+                              setSelectedQuestion(question.id.toString());
+                              // Update URL with question slug
+                              updateQuestionURL(question.id.toString());
                               // Scroll to the question smoothly
-                              scrollToQuestion(question.id);
+                              scrollToQuestion(question.id.toString());
                             }}
                             className={`w-full text-left p-3 rounded-lg transition-all duration-200 border-2 ${
-                              selectedQuestion === question.id
+                              selectedQuestion === question.id.toString()
                                 ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-md border-blue-400"
                                 : "hover:bg-gray-100 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border-transparent hover:border-blue-200 dark:hover:border-blue-700"
                             }`}>
-                            <div className="flex items-start space-x-3">
+                            <div className="flex items-center  space-x-3">
                               <div
                                 className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-200 ${
-                                  selectedQuestion === question.id
+                                  selectedQuestion === question.id.toString()
                                     ? "bg-white/20 scale-110"
                                     : "bg-gray-100 dark:bg-gray-700 hover:scale-105"
                                 }`}>
                                 <span
                                   className={`text-xs font-bold ${
-                                    selectedQuestion === question.id
+                                    selectedQuestion === question.id.toString()
                                       ? "text-white"
                                       : "text-gray-600 dark:text-gray-300"
                                   }`}>
-                                  {index + 1}
+                                  {(currentPage - 1) * 25 + index + 1}
                                 </span>
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="text-sm font-medium leading-tight line-clamp-3">
                                   {question.title}
                                 </div>
-                                {completedQuestions.has(question.id) && (
+                                {completedQuestions.has(
+                                  question.id.toString()
+                                ) && (
                                   <div className="flex items-center mt-1">
                                     <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
                                     <span className="text-xs text-green-600 dark:text-green-400">
@@ -1096,6 +971,17 @@ console.log('End');
                         }
                       });
                     }}>
+                    {/* Initial Loading State */}
+                    {isLoadingQuestions && apiQuestions.length === 0 && (
+                      <div className="flex justify-center items-center py-12">
+                        <div className="flex items-center space-x-3 text-gray-500 dark:text-gray-400">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                          <span className="text-lg">Loading questions...</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Questions List */}
                     {filteredQuestions.map((question, index) => (
                       <motion.div
                         key={question.id}
@@ -1105,7 +991,7 @@ console.log('End');
                         className={`${
                           isFocusMode ? "mb-4" : "mb-6"
                         } p-4 rounded-lg transition-all duration-300 ${
-                          selectedQuestion === question.id
+                          selectedQuestion === question.id.toString()
                             ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-2 border-blue-200 dark:border-blue-800"
                             : "bg-gray-50/50 dark:bg-gray-800/50 border border-gray-200/50 dark:border-white/20"
                         }`}
@@ -1114,7 +1000,7 @@ console.log('End');
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                              Q{index + 1}
+                              Q{(currentPage - 1) * 25 + index + 1}
                             </div>
                             <div>
                               <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -1123,26 +1009,30 @@ console.log('End');
                               <div className="flex items-center space-x-2 mt-1">
                                 <span
                                   className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                    question.difficulty === "Beginner"
+                                    question.level === "Beginner"
                                       ? "bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300"
-                                      : question.difficulty === "Intermediate"
+                                      : question.level === "Intermediate"
                                       ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300"
                                       : "bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300"
                                   }`}>
-                                  {question.difficulty}
+                                  {question.level}
                                 </span>
                                 <button
                                   onClick={() =>
-                                    toggleQuestionCompletion(question.id)
+                                    toggleQuestionCompletion(
+                                      question.id.toString()
+                                    )
                                   }
                                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all duration-200 ${
-                                    completedQuestions.has(question.id)
+                                    completedQuestions.has(
+                                      question.id.toString()
+                                    )
                                       ? "bg-green-500 border-green-500 text-white"
                                       : "border-gray-300 dark:border-gray-600 hover:border-blue-500"
                                   }`}>
-                                  {completedQuestions.has(question.id) && (
-                                    <CheckCircle className="w-3 h-3" />
-                                  )}
+                                  {completedQuestions.has(
+                                    question.id.toString()
+                                  ) && <CheckCircle className="w-3 h-3" />}
                                 </button>
                               </div>
                             </div>
@@ -1207,8 +1097,48 @@ console.log('End');
                             )}
                           </div>
                         )}
+
+                        {/* Author Information */}
+                        <div className="flex justify-end mt-4 pt-3 border-t border-gray-200/50 dark:border-gray-700/50">
+                          <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                            <span>By</span>
+                            <span className="font-medium text-gray-700 dark:text-gray-300">
+                              {question.author.name}
+                            </span>
+                          </div>
+                        </div>
                       </motion.div>
                     ))}
+
+                    {/* Infinite Scroll Loading Indicator */}
+                    {hasMore && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex justify-center items-center py-8">
+                        <div className="flex items-center space-x-3 text-gray-500 dark:text-gray-400">
+                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                          <span className="text-sm">
+                            Loading more questions...
+                          </span>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* End of Questions Indicator */}
+                    {!hasMore && apiQuestions.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex justify-center items-center py-8">
+                        <div className="text-center">
+                          <div className="text-gray-400 dark:text-gray-500 text-sm">
+                            🎉 You've reached the end! All {totalCount}{" "}
+                            questions loaded.
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
                 </motion.div>
               </div>
