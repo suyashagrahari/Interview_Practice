@@ -3,16 +3,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Mail, Lock, Eye, EyeOff, User, Chrome } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
-import {
-  signInWithGoogle,
-  signInWithEmail,
-  signUpWithEmail,
-  saveAuthToken,
-  saveUser,
-  initializeGoogleAuth,
-} from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import { useSignUp, useSignIn, useGoogleSignIn } from "@/hooks/useAuth";
+import { SignUpRequest, SignInRequest } from "@/lib/api";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -25,7 +19,6 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("login");
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
   const [formData, setFormData] = useState({
@@ -36,9 +29,20 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
     lastName: "",
   });
 
+  // React Query mutations
+  const signUpMutation = useSignUp();
+  const signInMutation = useSignIn();
+  const googleSignInMutation = useGoogleSignIn();
+
+  // Initialize Google Auth when modal opens
   useEffect(() => {
-    if (isOpen) {
-      initializeGoogleAuth();
+    if (isOpen && typeof window !== "undefined") {
+      // Load Google OAuth script
+      const script = document.createElement("script");
+      script.src = "https://accounts.google.com/gsi/client";
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
     }
   }, [isOpen]);
 
@@ -50,74 +54,121 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
     setError(""); // Clear error when user types
   };
 
-  const handleSuccessfulAuth = (user: any, token: string) => {
-    saveAuthToken(token);
-    saveUser(user);
-    onClose();
-    // Redirect to dashboard after successful authentication
-    router.push("/dashboard");
-  };
-
   const handleGoogleAuth = async () => {
-    setIsLoading(true);
     setError("");
 
-    try {
-      const result = await signInWithGoogle();
+    if (typeof window === "undefined" || !window.google) {
+      setError("Google OAuth not loaded. Please try again.");
+      return;
+    }
 
-      if (result) {
-        handleSuccessfulAuth(result.user, result.token);
-        console.log("Google sign in successful:", result.user);
-      } else {
-        setError("Google sign in failed. Please try again.");
+    try {
+      interface GoogleCredentialResponse {
+        credential: string;
+        select_by: string;
+      }
+
+      const response = await new Promise<GoogleCredentialResponse>(
+        (resolve, reject) => {
+          if (window.google?.accounts?.id) {
+            window.google.accounts.id.initialize({
+              client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "",
+              callback: resolve,
+              auto_select: false,
+              cancel_on_tap_outside: true,
+            });
+
+            window.google.accounts.id.prompt((notification) => {
+              if (
+                notification.isNotDisplayed() ||
+                notification.isSkippedMoment()
+              ) {
+                reject(new Error("Google OAuth prompt failed"));
+              }
+            });
+          } else {
+            reject(new Error("Google OAuth not available"));
+          }
+        }
+      );
+
+      if (response.credential) {
+        googleSignInMutation.mutate(
+          { credential: response.credential },
+          {
+            onSuccess: () => {
+              onClose();
+              router.push("/dashboard?profile=true");
+            },
+            onError: (error: any) => {
+              console.error("Google sign in error:", error);
+              setError(
+                error.message ||
+                  error.response?.data?.message ||
+                  "Google sign in failed. Please try again."
+              );
+            },
+          }
+        );
       }
     } catch (error) {
       console.error("Google OAuth error:", error);
       setError("Google sign in failed. Please try again.");
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError("");
 
-    try {
-      if (mode === "signup" && formData.password !== formData.confirmPassword) {
-        setError("Passwords don't match!");
-        return;
-      }
+    // Validate passwords match for signup
+    if (mode === "signup" && formData.password !== formData.confirmPassword) {
+      setError("Passwords don't match!");
+      return;
+    }
 
-      let result;
+    if (mode === "login") {
+      const signInData: SignInRequest = {
+        email: formData.email,
+        password: formData.password,
+      };
 
-      if (mode === "login") {
-        result = await signInWithEmail(formData.email, formData.password);
-      } else {
-        result = await signUpWithEmail(
-          formData.email,
-          formData.password,
-          formData.firstName,
-          formData.lastName
-        );
-      }
+      signInMutation.mutate(signInData, {
+        onSuccess: () => {
+          onClose();
+          router.push("/dashboard?profile=true");
+        },
+        onError: (error: any) => {
+          console.error("Sign in error:", error);
+          setError(
+            error.message ||
+              error.response?.data?.message ||
+              "Invalid email or password."
+          );
+        },
+      });
+    } else {
+      const signUpData: SignUpRequest = {
+        email: formData.email,
+        password: formData.password,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+      };
 
-      if (result) {
-        handleSuccessfulAuth(result.user, result.token);
-        console.log(`${mode} successful:`, result.user);
-      } else {
-        setError(
-          mode === "login"
-            ? "Invalid email or password."
-            : "Account creation failed. Please try again."
-        );
-      }
-    } catch (error) {
-      console.error("Authentication error:", error);
-      setError("Authentication failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+      signUpMutation.mutate(signUpData, {
+        onSuccess: () => {
+          onClose();
+          router.push("/dashboard?profile=true");
+        },
+        onError: (error: any) => {
+          console.error("Sign up error:", error);
+          setError(
+            error.message ||
+              error.response?.data?.message ||
+              "Account creation failed. Please try again."
+          );
+        },
+      });
     }
   };
 
@@ -319,9 +370,9 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
               {/* Submit Button - More Compact */}
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={signInMutation.isPending || signUpMutation.isPending}
                 className="w-full py-2.5 sm:py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-semibold rounded-lg hover:from-blue-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
-                {isLoading ? (
+                {signInMutation.isPending || signUpMutation.isPending ? (
                   <div className="flex items-center justify-center">
                     <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2"></div>
                     {mode === "login" ? "Signing In..." : "Creating Account..."}
@@ -349,11 +400,19 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
             {/* Google OAuth Button - More Compact */}
             <button
               onClick={handleGoogleAuth}
-              disabled={isLoading}
+              disabled={googleSignInMutation.isPending}
               className="w-full py-2.5 sm:py-3 px-4 border border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-700 dark:text-white font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base">
               <div className="flex items-center justify-center space-x-2 sm:space-x-3">
-                <Chrome className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Continue with Google</span>
+                {googleSignInMutation.isPending ? (
+                  <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-gray-400/30 border-t-gray-400 rounded-full animate-spin"></div>
+                ) : (
+                  <Chrome className="w-4 h-4 sm:w-5 sm:h-5" />
+                )}
+                <span>
+                  {googleSignInMutation.isPending
+                    ? "Signing in..."
+                    : "Continue with Google"}
+                </span>
               </div>
             </button>
 

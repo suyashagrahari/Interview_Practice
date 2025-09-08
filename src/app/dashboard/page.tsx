@@ -2,6 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSearchParams } from "next/navigation";
+import ProfileContent from "@/components/profile/profile-content";
+import SettingsContent from "@/components/settings/settings-content";
 import {
   User,
   FileText,
@@ -24,9 +27,13 @@ import {
   ChevronDown,
   ChevronUp,
   BookOpen,
+  Sun,
+  Moon,
+  Monitor,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 
 type InterviewLevel = "beginner" | "intermediate" | "expert";
 type InterviewDuration = "15" | "30" | "45";
@@ -47,8 +54,10 @@ interface InterviewConfig {
 const Dashboard = () => {
   const { user, logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { theme, setTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<string>("resume");
-  const [isMockInterviewOpen, setIsMockInterviewOpen] = useState(false);
+  const [isMockInterviewOpen, setIsMockInterviewOpen] = useState(true);
   const [interviewConfig, setInterviewConfig] = useState<InterviewConfig>({
     type: "resume",
     level: "beginner",
@@ -59,7 +68,32 @@ const Dashboard = () => {
   const [isConfiguring, setIsConfiguring] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isProfileSelected, setIsProfileSelected] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const closeProfile = () => {
+    setIsProfileOpen(false);
+    setIsProfileSelected(false);
+  };
+
+  const closeSettings = () => {
+    setIsSettingsOpen(false);
+    setIsProfileSelected(false);
+  };
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Check for profile parameter and open profile automatically
+  useEffect(() => {
+    const profileParam = searchParams.get("profile");
+    if (profileParam === "true") {
+      setIsProfileOpen(true);
+      setIsConfiguring(false);
+      // Clean up the URL parameter
+      const url = new URL(window.location.href);
+      url.searchParams.delete("profile");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [searchParams]);
 
   const interviewTypes = [
     {
@@ -282,7 +316,17 @@ const Dashboard = () => {
                       {interviewTypes.map((type) => (
                         <button
                           key={type.id}
-                          onClick={() => setActiveTab(type.id)}
+                          onClick={() => {
+                            setActiveTab(type.id);
+                            setInterviewConfig((prev) => ({
+                              ...prev,
+                              type: type.id,
+                            }));
+                            setIsProfileSelected(false);
+                            setIsSettingsOpen(false);
+                            setIsConfiguring(true);
+                            setIsInterviewStarted(false);
+                          }}
                           className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 ${
                             activeTab === type.id
                               ? "bg-blue-500/10 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/20 dark:border-blue-500/30"
@@ -313,23 +357,18 @@ const Dashboard = () => {
 
             {/* Dashboard */}
             <button
-              onClick={() => router.push("/dashboard/analytics")}
-              className={`w-full flex items-center rounded-xl text-left transition-all duration-200 ${
-                isConfiguring
-                  ? "bg-gradient-to-r from-blue-500/20 to-purple-500/20 dark:from-blue-500/30 dark:to-purple-500/30 text-blue-600 dark:text-blue-400 border border-blue-500/30 dark:border-blue-500/50 shadow-lg"
-                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md"
-              } ${
+              onClick={() => {
+                setIsProfileSelected(false);
+                setIsSettingsOpen(false);
+                router.push("/dashboard/analytics");
+              }}
+              className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
                 isSidebarCollapsed
                   ? "justify-center p-3"
                   : "space-x-3 px-4 py-3"
               }`}
               title={isSidebarCollapsed ? "Dashboard" : ""}>
-              <div
-                className={`p-2 rounded-lg ${
-                  isConfiguring
-                    ? "bg-blue-500/20 dark:bg-blue-500/30"
-                    : "bg-gray-100/50 dark:bg-white/10"
-                }`}>
+              <div className="p-2 rounded-lg bg-gray-100/50 dark:bg-white/10">
                 <BarChart3 className="w-5 h-5 flex-shrink-0" />
               </div>
               {!isSidebarCollapsed && (
@@ -339,7 +378,11 @@ const Dashboard = () => {
 
             {/* Question Practice */}
             <button
-              onClick={() => router.push("/interview-practice")}
+              onClick={() => {
+                setIsProfileSelected(false);
+                setIsSettingsOpen(false);
+                router.push("/interview-practice");
+              }}
               className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
                 isSidebarCollapsed
                   ? "justify-center p-3"
@@ -356,6 +399,12 @@ const Dashboard = () => {
 
             {/* Other Navigation Items */}
             <button
+              onClick={() => {
+                setIsProfileSelected(false);
+                setIsSettingsOpen(false);
+                // Add navigation logic for Interview History
+                console.log("Interview History clicked");
+              }}
               className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
                 isSidebarCollapsed
                   ? "justify-center p-3"
@@ -371,6 +420,12 @@ const Dashboard = () => {
             </button>
 
             <button
+              onClick={() => {
+                setIsProfileSelected(false);
+                setIsSettingsOpen(false);
+                // Add navigation logic for Performance
+                console.log("Performance clicked");
+              }}
               className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
                 isSidebarCollapsed
                   ? "justify-center p-3"
@@ -386,6 +441,12 @@ const Dashboard = () => {
             </button>
 
             <button
+              onClick={() => {
+                setIsProfileSelected(false);
+                setIsSettingsOpen(false);
+                // Add navigation logic for Community
+                console.log("Community clicked");
+              }}
               className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
                 isSidebarCollapsed
                   ? "justify-center p-3"
@@ -407,30 +468,46 @@ const Dashboard = () => {
             <div>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className={`w-full flex items-center rounded-xl text-left transition-all duration-200 text-gray-700 dark:text-gray-300 hover:bg-gray-100/60 dark:hover:bg-white/15 hover:shadow-md ${
+                className={`w-full flex items-center rounded-xl text-left transition-all duration-200 group  ${
+                  isProfileOpen
+                    ? "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-500/10 dark:to-purple-500/10 border border-blue-200/50 dark:border-blue-500/30 shadow-md "
+                    : "hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100 dark:hover:from-white/5 dark:hover:to-white/10 hover:shadow-md"
+                } ${
                   isSidebarCollapsed
                     ? "justify-center p-3"
                     : "justify-between px-4 py-3"
                 }`}
                 title={isSidebarCollapsed ? "Profile" : ""}>
                 <div
-                  className={`flex items-center ${
-                    isSidebarCollapsed ? "" : "space-x-3"
+                  className={`flex items-center  ${
+                    isSidebarCollapsed ? "" : "space-x-2"
                   }`}>
-                  <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                  <div
+                    className={`w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg transition-all duration-200 ${
+                      isProfileOpen
+                        ? "ring-2 ring-blue-200 dark:ring-blue-500/50"
+                        : "group-hover:ring-2 group-hover:ring-blue-200 dark:group-hover:ring-blue-500/50"
+                    }`}>
                     <User className="w-5 h-5 text-white" />
                   </div>
                   {!isSidebarCollapsed && (
-                    <div
-                      className={`transition-all duration-200 min-w-0 ${
-                        isProfileOpen ? "opacity-100" : "opacity-0"
-                      }`}>
-                      <div className="font-semibold text-gray-900 dark:text-white truncate">
+                    <div className="min-w-0 flex-1">
+                      <div
+                        className={`font-semibold text-gray-900 dark:text-white truncate transition-all duration-200 ${
+                          isProfileOpen
+                            ? "text-blue-700 dark:text-blue-200"
+                            : "group-hover:text-blue-600 dark:group-hover:text-blue-300"
+                        }`}>
                         {user?.firstName ||
                           user?.email?.split("@")[0] ||
                           "User"}
                       </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-300 truncate">
+                      <div
+                        className={`text-xs truncate transition-all duration-200 ${
+                          isProfileOpen
+                            ? "text-blue-600 dark:text-blue-300"
+                            : "text-gray-600 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400"
+                        }`}>
                         {user?.email}
                       </div>
                     </div>
@@ -439,9 +516,21 @@ const Dashboard = () => {
                 {!isSidebarCollapsed && (
                   <div className="flex-shrink-0">
                     {isProfileOpen ? (
-                      <ChevronUp className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                      <ChevronUp
+                        className={`w-5 h-5 transition-all duration-200 ${
+                          isProfileOpen
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-400"
+                        }`}
+                      />
                     ) : (
-                      <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                      <ChevronDown
+                        className={`w-5 h-5 transition-all duration-200 ${
+                          isProfileOpen
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-500 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400"
+                        }`}
+                      />
                     )}
                   </div>
                 )}
@@ -456,20 +545,100 @@ const Dashboard = () => {
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.2 }}
-                      className="ml-8 mt-2 space-y-2 overflow-hidden">
-                      <button className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100/30 dark:hover:bg-white/5">
-                        <Settings className="w-4 h-4" />
-                        <span className="text-sm">Settings</span>
-                      </button>
-                      <button className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 text-gray-600 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100/30 dark:hover:bg-white/5">
-                        <User className="w-4 h-4" />
-                        <span className="text-sm">Profile</span>
+                      className="ml-0 mt-3 space-y-2 overflow-hidden">
+                      <button
+                        onClick={() => {
+                          setIsSettingsOpen(true);
+                          setIsProfileSelected(false);
+                          setIsConfiguring(false);
+                          setIsInterviewStarted(false);
+                        }}
+                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 group ${
+                          isSettingsOpen
+                            ? "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-500/20 dark:to-blue-500/30 text-blue-700 dark:text-blue-200 border border-blue-200/50 dark:border-blue-500/30 shadow-sm"
+                            : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-blue-100/50 dark:hover:from-blue-500/10 dark:hover:to-blue-500/20 hover:shadow-sm"
+                        }`}>
+                        <Settings
+                          className={`w-4 h-4 transition-colors duration-200 ${
+                            isSettingsOpen
+                              ? "text-blue-600 dark:text-blue-300"
+                              : "group-hover:text-blue-500 dark:group-hover:text-blue-400"
+                          }`}
+                        />
+                        <span className="text-sm font-medium">Settings</span>
                       </button>
                       <button
+                        onClick={() => {
+                          setIsProfileSelected(true);
+                          setIsSettingsOpen(false);
+                          // Don't reset isConfiguring and isInterviewStarted to maintain resume-based interview state
+                        }}
+                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 group ${
+                          isProfileSelected
+                            ? "bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-500/20 dark:to-blue-500/30 text-blue-700 dark:text-blue-200 border border-blue-200/50 dark:border-blue-500/30 shadow-sm"
+                            : "text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-300 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-blue-100/50 dark:hover:from-blue-500/10 dark:hover:to-blue-500/20 hover:shadow-sm"
+                        }`}>
+                        <User
+                          className={`w-4 h-4 transition-colors duration-200 ${
+                            isProfileSelected
+                              ? "text-blue-600 dark:text-blue-300"
+                              : "group-hover:text-blue-500 dark:group-hover:text-blue-400"
+                          }`}
+                        />
+                        <span className="text-sm font-medium">Profile</span>
+                      </button>
+
+                      {/* Theme Toggle Section */}
+                      <div className="px-3 py-3 border-t border-gray-200/20 dark:border-white/10">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                            Theme
+                          </div>
+                          <div className="w-2 h-2 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 bg-gradient-to-r from-gray-100 to-gray-200 dark:from-slate-700 dark:to-slate-600 rounded-xl p-1 shadow-inner">
+                          <button
+                            onClick={() => setTheme("light")}
+                            className={`flex flex-col items-center justify-center py-2.5 px-3 rounded-lg transition-all duration-300 group ${
+                              theme === "light"
+                                ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-lg border border-blue-200/50 dark:border-blue-500/30 scale-105"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-slate-600/50 hover:scale-105"
+                            }`}
+                            title="Light Mode">
+                            <Sun
+                              className={`w-4 h-4 mb-1 transition-all duration-300 ${
+                                theme === "light"
+                                  ? "text-yellow-500 dark:text-yellow-400"
+                                  : "group-hover:text-yellow-500 dark:group-hover:text-yellow-400"
+                              }`}
+                            />
+                            <span className="text-xs font-medium">Light</span>
+                          </button>
+                          <button
+                            onClick={() => setTheme("dark")}
+                            className={`flex flex-col items-center justify-center py-2.5 px-3 rounded-lg transition-all duration-300 group ${
+                              theme === "dark"
+                                ? "bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-lg border border-blue-200/50 dark:border-blue-500/30 scale-105"
+                                : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-slate-600/50 hover:scale-105"
+                            }`}
+                            title="Dark Mode">
+                            <Moon
+                              className={`w-4 h-4 mb-1 transition-all duration-300 ${
+                                theme === "dark"
+                                  ? "text-indigo-500 dark:text-indigo-400"
+                                  : "group-hover:text-indigo-500 dark:group-hover:text-indigo-400"
+                              }`}
+                            />
+                            <span className="text-xs font-medium">Dark</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <button
                         onClick={logout}
-                        className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-500/10">
-                        <ArrowRight className="w-4 h-4 rotate-180" />
-                        <span className="text-sm">Logout</span>
+                        className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left transition-all duration-200 group text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-gradient-to-r hover:from-red-50 hover:to-red-100 dark:hover:from-red-500/10 dark:hover:to-red-500/20 hover:shadow-sm">
+                        <ArrowRight className="w-4 h-4 rotate-180 group-hover:scale-110 transition-transform duration-200" />
+                        <span className="text-sm font-medium">Logout</span>
                       </button>
                     </motion.div>
                   )}
@@ -484,7 +653,27 @@ const Dashboard = () => {
           {/* Content Area */}
           <div className="h-full overflow-y-auto">
             <AnimatePresence mode="wait">
-              {isConfiguring ? (
+              {isSettingsOpen ? (
+                <motion.div
+                  key="settings"
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full">
+                  <SettingsContent onClose={closeSettings} />
+                </motion.div>
+              ) : isProfileSelected ? (
+                <motion.div
+                  key="profile"
+                  initial={{ opacity: 0, x: 50 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -50 }}
+                  transition={{ duration: 0.3 }}
+                  className="h-full">
+                  <ProfileContent onClose={closeProfile} />
+                </motion.div>
+              ) : isConfiguring ? (
                 <motion.div
                   key="config"
                   initial={{ opacity: 0, x: 50 }}

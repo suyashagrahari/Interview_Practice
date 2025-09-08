@@ -7,23 +7,8 @@ import {
   useEffect,
   ReactNode,
 } from "react";
-import {
-  User,
-  getUser,
-  saveUser,
-  removeUser,
-  saveAuthToken,
-  getAuthToken,
-  removeAuthToken,
-} from "@/lib/auth";
-
-interface AuthContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (user: User, token: string) => void;
-  logout: () => void;
-}
+import { useCurrentUser, useIsAuthenticated, useLogout } from "@/hooks/useAuth";
+import { User, AuthContextType } from "@/types/auth";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -40,54 +25,81 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const user = useCurrentUser();
+  const isAuthenticated = useIsAuthenticated();
+  const logoutMutation = useLogout();
 
   useEffect(() => {
-    // Check if user is already logged in on app load
-    const checkAuth = () => {
-      try {
-        const savedUser = getUser();
-        const savedToken = getAuthToken();
-
-        if (savedUser && savedToken) {
-          setUser(savedUser);
-        }
-      } catch (error) {
-        console.error("Error checking authentication:", error);
-        // Clear any corrupted data
-        removeUser();
-        removeAuthToken();
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    checkAuth();
+    // Set loading to false after initial render
+    setIsLoading(false);
   }, []);
 
-  const login = (user: User, token: string) => {
-    saveUser(user);
-    saveAuthToken(token);
-    setUser(user);
+  const login = async (email: string, password: string) => {
+    // This will be handled by the auth modal using React Query
+    throw new Error("Use signInMutation from useAuth hooks instead");
   };
 
-  const logout = () => {
-    removeUser();
-    removeAuthToken();
-    setUser(null);
-    // Redirect to home page after logout
-    if (typeof window !== "undefined") {
-      window.location.href = "/";
-    }
+  const signup = async (data: any) => {
+    // This will be handled by the auth modal using React Query
+    throw new Error("Use signUpMutation from useAuth hooks instead");
+  };
+
+  const googleLogin = async (credential: string) => {
+    // This will be handled by the auth modal using React Query
+    throw new Error("Use googleSignInMutation from useAuth hooks instead");
+  };
+
+  const logout = async () => {
+    logoutMutation.mutate();
+  };
+
+  const updateProfile = async (data: any) => {
+    // This will be handled by React Query hooks
+    throw new Error("Use updateProfileMutation from useAuth hooks instead");
+  };
+
+  const changePassword = async (data: any) => {
+    // This will be handled by React Query hooks
+    throw new Error("Use changePasswordMutation from useAuth hooks instead");
+  };
+
+  const forgotPassword = async (email: string) => {
+    // This will be handled by React Query hooks
+    throw new Error("Use forgotPasswordMutation from useAuth hooks instead");
+  };
+
+  const resetPassword = async (data: any) => {
+    // This will be handled by React Query hooks
+    throw new Error("Use resetPasswordMutation from useAuth hooks instead");
+  };
+
+  const verifyEmail = async (token: string) => {
+    // This will be handled by React Query hooks
+    throw new Error("Use verifyEmailMutation from useAuth hooks instead");
+  };
+
+  const resendVerification = async () => {
+    // This will be handled by React Query hooks
+    throw new Error(
+      "Use resendVerificationMutation from useAuth hooks instead"
+    );
   };
 
   const value: AuthContextType = {
     user,
-    isAuthenticated: !!user,
+    isAuthenticated,
     isLoading,
     login,
+    signup,
+    googleLogin,
     logout,
+    updateProfile,
+    changePassword,
+    forgotPassword,
+    resetPassword,
+    verifyEmail,
+    resendVerification,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

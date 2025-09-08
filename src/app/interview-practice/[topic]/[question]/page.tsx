@@ -5,10 +5,10 @@ import { redirect } from "next/navigation";
 // e.g., /interview-practice/react/what-is-react
 
 interface QuestionPageProps {
-  params: {
+  params: Promise<{
     topic: string;
     question: string;
-  };
+  }>;
 }
 
 // Generate metadata for SEO

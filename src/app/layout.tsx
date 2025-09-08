@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-// import { Toaster } from "sonner";
+import { QueryProvider } from "@/providers/query-provider";
+import { ReduxProvider } from "@/providers/redux-provider";
+import { Toaster } from "sonner";
 import { AuthProvider } from "@/contexts/auth-context";
 
 const inter = Inter({
@@ -99,20 +101,24 @@ export default function RootLayout({
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange>
-          <AuthProvider>
-            {children}
-            {/* <Toaster
-              position="top-right"
-              toastOptions={{
-                duration: 4000,
-                style: {
-                  background: "hsl(var(--background))",
-                  color: "hsl(var(--foreground))",
-                  border: "1px solid hsl(var(--border))",
-                },
-              }}
-            /> */}
-          </AuthProvider>
+          <ReduxProvider>
+            <QueryProvider>
+              <AuthProvider>
+                {children}
+                <Toaster
+                  position="top-right"
+                  toastOptions={{
+                    duration: 4000,
+                    style: {
+                      background: "hsl(var(--background))",
+                      color: "hsl(var(--foreground))",
+                      border: "1px solid hsl(var(--border))",
+                    },
+                  }}
+                />
+              </AuthProvider>
+            </QueryProvider>
+          </ReduxProvider>
         </ThemeProvider>
       </body>
     </html>

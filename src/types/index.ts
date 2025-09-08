@@ -82,3 +82,6 @@ export interface PricingPlan {
   popular?: boolean
   cta: string
 }
+
+// Re-export auth types
+export * from './auth';
