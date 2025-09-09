@@ -137,14 +137,14 @@ export default function ExperienceSection() {
   };
 
   return (
-    <div className="p-6">
-      <div className="max-w-4xl">
-        <div className="flex items-center justify-between mb-6">
+    <div className="p-4">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
               Experience Details
             </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            <p className="text-xs text-gray-600 dark:text-gray-400">
               {isAdding
                 ? "Add your work experience"
                 : isEditing
@@ -153,18 +153,18 @@ export default function ExperienceSection() {
             </p>
           </div>
           {(isAdding || isEditing) && (
-            <div className="flex space-x-3">
+            <div className="flex space-x-2">
               <button
                 onClick={handleCancel}
-                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors flex items-center space-x-2">
-                <X className="w-4 h-4" />
+                className="px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors flex items-center space-x-1.5">
+                <X className="w-3 h-3" />
                 <span>Cancel</span>
               </button>
               <button
                 onClick={handleSave}
-                className="px-6 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2">
-                <Save className="w-4 h-4" />
-                <span>Save to Experience List</span>
+                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 text-xs">
+                <Save className="w-3 h-3" />
+                <span>Save Experience</span>
               </button>
             </div>
           )}
@@ -177,7 +177,7 @@ export default function ExperienceSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="space-y-6">
+              className="space-y-4">
               {/* Role */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -187,7 +187,7 @@ export default function ExperienceSection() {
                   type="text"
                   value={formData.role}
                   onChange={(e) => handleInputChange("role", e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="e.g., Software Engineer, Marketing Manager"
                 />
               </div>
@@ -201,7 +201,7 @@ export default function ExperienceSection() {
                   type="text"
                   value={formData.company}
                   onChange={(e) => handleInputChange("company", e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="e.g., Google, Microsoft, Apple"
                 />
               </div>
@@ -222,7 +222,7 @@ export default function ExperienceSection() {
                       onChange={(e) =>
                         handleInputChange("startDate", e.target.value)
                       }
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                     />
                   </div>
                   <div>
@@ -236,7 +236,7 @@ export default function ExperienceSection() {
                         handleInputChange("endDate", e.target.value)
                       }
                       disabled={formData.isCurrent}
-                      className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 dark:disabled:bg-slate-600"
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-100 dark:disabled:bg-slate-600"
                     />
                   </div>
                 </div>
@@ -268,7 +268,7 @@ export default function ExperienceSection() {
                   onChange={(e) =>
                     handleInputChange("location", e.target.value)
                   }
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="e.g., New York, NY"
                 />
               </div>
@@ -283,12 +283,12 @@ export default function ExperienceSection() {
                   onChange={(e) =>
                     handleInputChange("description", e.target.value)
                   }
-                  rows={6}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
+                  rows={4}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 resize-none"
                   placeholder="Describe your responsibilities and achievements..."
                 />
-                <div className="mt-2 flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                  <div className="w-4 h-4 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
+                <div className="mt-2 flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
+                  <div className="w-3 h-3 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center">
                     💡
                   </div>
                   <span>
@@ -304,18 +304,18 @@ export default function ExperienceSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="text-center py-12">
-              <Building className="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              className="text-center py-8">
+              <Building className="w-12 h-12 mx-auto text-gray-400 dark:text-gray-600 mb-3" />
+              <h3 className="text-base font-medium text-gray-900 dark:text-white mb-1">
                 No experience selected
               </h3>
-              <p className="text-gray-500 dark:text-gray-400 mb-6">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
                 Select an experience from the sidebar to edit, or add a new one.
               </p>
               <button
                 onClick={handleAddNew}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2 mx-auto">
-                <Plus className="w-5 h-5" />
+                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 mx-auto text-xs">
+                <Plus className="w-4 h-4" />
                 <span>Add Experience</span>
               </button>
             </motion.div>

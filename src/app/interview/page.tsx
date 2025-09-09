@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import AiImage from "../../../public/images/ai_image.jpeg";
+import CandidateImage from "../../../public/images/HumanImage.webp";
 import {
   ArrowLeft,
   Video,
@@ -18,8 +20,20 @@ import {
   Play,
   Pause,
   Square,
+  Eye,
+  Send,
+  Bot,
+  User,
+  Timer,
+  Zap,
+  Star,
+  MessageCircle,
+  Sun,
+  Moon,
+  Palette,
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
+import Image from "next/image";
 
 const InterviewPage = () => {
   const router = useRouter();
@@ -31,10 +45,55 @@ const InterviewPage = () => {
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(10);
   const [timeRemaining, setTimeRemaining] = useState(30 * 60); // 30 minutes in seconds
   const [interviewType, setInterviewType] = useState("");
+  const [liveTranscription, setLiveTranscription] = useState("");
+  const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [showHint, setShowHint] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [currentQuestionData, setCurrentQuestionData] = useState({
+    question: "Can you explain the concept of closures in JavaScript?",
+    answer:
+      "A closure is a function that has access to variables in its outer (enclosing) scope even after the outer function has returned. Closures are created every time a function is created, at function creation time. They allow for data privacy and the creation of function factories.",
+  });
+  // Ref for question section scrolling
+  const questionSectionRef = useRef<HTMLDivElement>(null);
+
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 1,
+      type: "ai",
+      message:
+        "Hello! I'm your AI interviewer. Let's begin with your first question. Can you tell me about a challenging project you've worked on?",
+      timestamp: "10:32 AM",
+    },
+    {
+      id: 2,
+      type: "user",
+      message:
+        "Certainly. One of the most challenging projects was developing a real-time data visualization dashboard. The main difficulty was handling large datasets and ensuring the UI remained responsive.",
+      timestamp: "10:33 AM",
+    },
+    {
+      id: 3,
+      type: "user",
+      message:
+        "We used techniques like data pagination, lazy loading, and optimized rendering with virtual lists.",
+      timestamp: "10:34 AM",
+    },
+    {
+      id: 4,
+      type: "ai",
+      message:
+        "That's interesting. What was the most significant outcome of that project?",
+      timestamp: "10:35 AM",
+    },
+  ]);
 
   // Get interview type from URL params
   useEffect(() => {
@@ -80,15 +139,51 @@ const InterviewPage = () => {
 
   const handleStartRecording = () => {
     setIsRecording(true);
+    setIsAISpeaking(false); // AI stops speaking when user starts
   };
 
   const handleStopRecording = () => {
     setIsRecording(false);
+    setIsAISpeaking(true); // AI starts speaking when user stops
   };
 
   const handleEndInterview = () => {
+    setShowExitConfirm(true);
+  };
+
+  const confirmExitInterview = () => {
     setIsInterviewStarted(false);
+    setShowExitConfirm(false);
     router.push("/dashboard");
+  };
+
+  const cancelExitInterview = () => {
+    setShowExitConfirm(false);
+  };
+
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+    setShowThemeMenu(false);
+  };
+
+  const handleThemeChange = (theme: "light" | "dark") => {
+    setIsDarkMode(theme === "dark");
+    setShowThemeMenu(false);
+  };
+
+  // Handle hint toggle with smooth scrolling
+  const handleHintToggle = () => {
+    setShowHint(!showHint);
+
+    // Scroll to question section when hint is shown
+    if (!showHint && questionSectionRef.current) {
+      setTimeout(() => {
+        questionSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
   };
 
   if (!isClient) {
@@ -110,7 +205,10 @@ const InterviewPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900">
+    <div
+      className={`h-screen w-screen overflow-hidden ${
+        isDarkMode ? "bg-slate-900" : "bg-slate-50"
+      }`}>
       {/* Guidelines Modal */}
       <InterviewGuidelinesModal
         isOpen={isGuidelinesModalOpen}
@@ -119,315 +217,618 @@ const InterviewPage = () => {
       />
 
       {/* Main Interview Interface */}
-      <div className="h-screen flex flex-col">
-        {/* Main Content */}
-        <div className="flex-1 flex">
-          {/* Left Panel - Main Interview Area */}
-          <div className="w-[70%] flex flex-col bg-white/30 dark:bg-slate-800/30 backdrop-blur-sm">
-            {/* Interview Header */}
-            <div className="bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-b border-gray-200/30 dark:border-white/20 p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-6">
-                  <div>
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                      Interviewer Name
-                    </h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Total Interview Taken: 1,234
-                    </p>
+      <div className="h-full w-full flex">
+        {/* Left Panel - Main Interview Area */}
+        <div
+          className={`w-[70%] flex flex-col ${
+            isDarkMode
+              ? "bg-slate-800 border-slate-700"
+              : "bg-white border-slate-200"
+          } border-r`}>
+          {/* Interview Header */}
+          <div
+            className={`border-b px-6 py-4 flex-shrink-0 ${
+              isDarkMode
+                ? "bg-slate-800 border-slate-700"
+                : "bg-white border-slate-200"
+            }`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <h2
+                  className={`text-lg font-semibold ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  Samantha Lee
+                </h2>
+                <p
+                  className={`text-sm ${
+                    isDarkMode ? "text-slate-400" : "text-slate-600"
+                  }`}>
+                  Total Interviews Taken: 12
+                </p>
+              </div>
+              <div className="flex items-center space-x-4">
+                <div className="text-center">
+                  <div
+                    className={`text-2xl font-bold flex items-center space-x-2 ${
+                      isDarkMode ? "text-slate-200" : "text-slate-800"
+                    }`}>
+                    <Timer className="w-6 h-6" />
+                    <span>{formatTime(timeRemaining)}</span>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                      {formatTime(timeRemaining)}
-                    </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      It will go reduce as time spent
-                    </p>
-                  </div>
+                  <p
+                    className={`text-xs ${
+                      isDarkMode ? "text-slate-500" : "text-slate-500"
+                    }`}>
+                    Time remaining
+                  </p>
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* Video Area */}
-            <div className="flex-1 p-6">
-              <div className="h-full flex flex-col">
-                {/* Main Video Area - Split View */}
-                <div className="flex-1 mb-4">
-                  <div className="h-full grid grid-cols-2 gap-4">
-                    {/* User Video */}
-                    <div className="relative bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden shadow-lg">
-                      {isVideoOn ? (
-                        <div className="w-full h-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-                          <div className="text-center">
-                            <Users className="w-16 h-16 text-white mx-auto mb-3" />
-                            <p className="text-white text-lg font-medium">
-                              You
-                            </p>
-                            <p className="text-white/80 text-sm">Interviewee</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="w-full h-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-                          <VideoOff className="w-16 h-16 text-gray-500 dark:text-gray-400" />
-                        </div>
-                      )}
+          {/* Video Area */}
+          <div className="flex-1 p-6 min-h-0">
+            <div className="h-full flex flex-col min-h-0">
+              {/* Main Video Area - Single Large Video */}
+              <div className="flex-1 mb-6 min-h-0">
+                <div
+                  className={`xl:h-[55vh] relative rounded-lg overflow-hidden border ${
+                    isDarkMode
+                      ? "bg-slate-700 border-slate-600"
+                      : "bg-slate-100 border-slate-300"
+                  }`}>
+                  {isVideoOn ? (
+                    <div className="w-full h-full relative">
+                      <Image
+                        src={CandidateImage}
+                        alt="Candidate"
+                        fill
+                        className="object-cover"
+                      />
 
-                      {/* User Status */}
-                      <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 text-white text-xs rounded">
-                        {isVideoOn ? "Video On" : "Video Off"}
-                      </div>
-
-                      {/* Recording Indicator */}
-                      {isRecording && (
-                        <div className="absolute top-3 right-3 w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-                      )}
-                    </div>
-
-                    {/* AI Video */}
-                    <div className="relative bg-gray-100 dark:bg-gray-700 rounded-xl overflow-hidden shadow-lg">
-                      <div className="w-full h-full bg-gradient-to-br from-green-500 to-teal-600 flex items-center justify-center">
-                        <div className="text-center">
-                          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-3">
-                            <span className="text-white text-2xl font-bold">
-                              AI
-                            </span>
-                          </div>
-                          <p className="text-white text-lg font-medium">
-                            AI Interviewer
+                      {/* Live Transcription Overlay */}
+                      {liveTranscription && (
+                        <div className="absolute bottom-4 left-4 right-4 bg-slate-900/80 backdrop-blur-sm rounded-lg p-4">
+                          <p className="text-white text-sm leading-relaxed">
+                            {liveTranscription}
                           </p>
-                          <p className="text-white/80 text-sm">Sarah Chen</p>
                         </div>
-                      </div>
-
-                      {/* AI Status */}
-                      <div className="absolute top-3 left-3 px-2 py-1 bg-green-500 text-white text-xs rounded">
-                        AI Active
-                      </div>
-
-                      {/* AI Speaking Indicator */}
-                      <div className="absolute bottom-3 right-3 flex space-x-1">
-                        <div className="w-1 h-4 bg-white/60 rounded animate-pulse"></div>
-                        <div
-                          className="w-1 h-4 bg-white/60 rounded animate-pulse"
-                          style={{ animationDelay: "0.2s" }}></div>
-                        <div
-                          className="w-1 h-4 bg-white/60 rounded animate-pulse"
-                          style={{ animationDelay: "0.4s" }}></div>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                </div>
-
-                {/* Current Question */}
-                <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-lg border border-gray-200/30 dark:border-white/20 mb-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      Question {currentQuestion}
-                    </h3>
-                    <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-                      <Clock className="w-4 h-4" />
-                      <span>2 minutes remaining</span>
+                  ) : (
+                    <div
+                      className={`w-full h-full flex items-center justify-center ${
+                        isDarkMode ? "bg-slate-700" : "bg-slate-100"
+                      }`}>
+                      <VideoOff
+                        className={`w-16 h-16 ${
+                          isDarkMode ? "text-slate-400" : "text-slate-500"
+                        }`}
+                      />
                     </div>
-                  </div>
-                  <p className="text-gray-800 dark:text-gray-200 text-base leading-relaxed">
-                    Tell me about yourself and walk me through your resume. What
-                    are your key strengths and how do they align with this role?
-                  </p>
-                </div>
+                  )}
 
-                {/* Subtitle Area */}
-                <div className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow-lg border border-gray-200/30 dark:border-white/20 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                    Live Transcription
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">
-                    "I'm a software engineer with 3 years of experience in
-                    full-stack development, specializing in React and
-                    Node.js..."
-                  </p>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    {/* Video Controls */}
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={handleToggleVideo}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                          isVideoOn
-                            ? "bg-green-500 hover:bg-green-600 text-white"
-                            : "bg-red-500 hover:bg-red-600 text-white"
-                        }`}>
-                        {isVideoOn ? (
-                          <Video className="w-5 h-5" />
-                        ) : (
-                          <VideoOff className="w-5 h-5" />
-                        )}
-                      </button>
-
-                      <button
-                        onClick={handleToggleMic}
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-200 ${
-                          isMicOn
-                            ? "bg-green-500 hover:bg-green-600 text-white"
-                            : "bg-red-500 hover:bg-red-600 text-white"
-                        }`}>
-                        {isMicOn ? (
-                          <Mic className="w-5 h-5" />
-                        ) : (
-                          <MicOff className="w-5 h-5" />
-                        )}
-                      </button>
+                  {/* Recording Indicator */}
+                  {isRecording && (
+                    <div className="absolute top-4 right-4 flex items-center space-x-2">
+                      <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                      <span className="text-white text-xs bg-red-500 px-2 py-1 rounded">
+                        REC
+                      </span>
                     </div>
+                  )}
 
-                    {/* Recording Controls */}
+                  {/* Start Answering Button - Bottom Left */}
+                  <div className="absolute bottom-4 left-4 text-sm">
                     {!isRecording ? (
                       <button
                         onClick={handleStartRecording}
-                        className="flex items-center space-x-2 px-6 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-all duration-200 font-medium">
+                        className="flex items-center space-x-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-all duration-200 font-medium text-sm">
                         <Play className="w-4 h-4" />
                         <span>Start Answering</span>
                       </button>
                     ) : (
                       <button
                         onClick={handleStopRecording}
-                        className="flex items-center space-x-2 px-6 py-3 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all duration-200 font-medium">
+                        className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 font-medium text-sm">
                         <Square className="w-4 h-4" />
                         <span>Stop Answering</span>
                       </button>
                     )}
-
+                  </div>
+                  {/* AI Speaking Indicator - Bottom Right */}
+                  <div className="absolute bottom-0 right-4 flex flex-col items-center">
+                    {/* AI Profile Picture - Clickable Modal Trigger */}
                     <button
-                      onClick={handleEndInterview}
-                      className="px-6 py-3 border-2 border-red-500 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all duration-200 font-medium">
-                      Exit Interview
+                      onClick={() => setShowAIModal(!showAIModal)}
+                      className="w-20 h-20 rounded-full border-2 border-white hover:scale-105 transition-all duration-200 overflow-hidden mb-2">
+                      <Image
+                        src={AiImage}
+                        alt="AI Interviewer"
+                        width={80}
+                        height={80}
+                        className="w-full h-full object-cover"
+                      />
                     </button>
+                    {/* Speaking/Listening Button */}
+                    <div
+                      className={`text-white px-3 py-1.5 rounded text-xs font-medium flex items-center space-x-1 ${
+                        isRecording ? "bg-slate-700" : "bg-slate-600"
+                      }`}>
+                      <Mic className="w-3 h-3" />
+                      <span>
+                        {isRecording ? "Listening..." : "Speaking..."}
+                      </span>
+                    </div>
                   </div>
+                </div>
+                <div
+                  ref={questionSectionRef}
+                  className={`rounded-lg p-6 border my-4 flex-shrink-0 ${
+                    isDarkMode
+                      ? "bg-slate-800 border-slate-700"
+                      : "bg-white border-slate-200"
+                  }`}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3
+                      className={`text-lg font-semibold ${
+                        isDarkMode ? "text-white" : "text-slate-900"
+                      }`}>
+                      Question {currentQuestion}
+                    </h3>
+                    <div
+                      className={`flex items-center space-x-2 text-sm ${
+                        isDarkMode ? "text-slate-400" : "text-slate-600"
+                      }`}>
+                      <Clock className="w-4 h-4" />
+                      <span>2 min</span>
+                    </div>
+                  </div>
+                  <p
+                    className={`text-base leading-relaxed mb-4 ${
+                      isDarkMode ? "text-slate-200" : "text-slate-700"
+                    }`}>
+                    {currentQuestionData.question}
+                  </p>
 
-                  {/* Interview Type Buttons */}
-                  <div className="flex items-center space-x-2">
-                    <button className="px-4 py-2 border-2 border-blue-500 text-blue-500 rounded-lg text-sm font-medium">
-                      Entry Level
+                  {/* Hint Section */}
+                  {showHint && (
+                    <div
+                      className={`border rounded-lg p-4 mb-4 ${
+                        isDarkMode
+                          ? "bg-slate-700 border-slate-600"
+                          : "bg-slate-50 border-slate-300"
+                      }`}>
+                      <h4
+                        className={`text-sm font-semibold mb-2 ${
+                          isDarkMode ? "text-slate-300" : "text-slate-700"
+                        }`}>
+                        Answer:
+                      </h4>
+                      <p
+                        className={`text-sm leading-relaxed ${
+                          isDarkMode ? "text-slate-300" : "text-slate-600"
+                        }`}>
+                        {currentQuestionData.answer}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      onClick={handleHintToggle}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        isDarkMode
+                          ? "bg-slate-700 text-slate-300 border border-slate-600 hover:bg-slate-600"
+                          : "bg-slate-100 text-slate-700 border border-slate-300 hover:bg-slate-200"
+                      }`}>
+                      <Eye className="w-4 h-4" />
+                      <span>{showHint ? "Hide hint" : "View hint"}</span>
                     </button>
-                    <button className="px-4 py-2 border-2 border-purple-500 text-purple-500 rounded-lg text-sm font-medium">
-                      Technical Interview
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Panel - Chat */}
-          <div className="w-[30%] bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-l border-gray-200/30 dark:border-white/20">
-            <div className="h-full flex flex-col">
-              {/* Chat Header */}
-              <div className="p-4 border-b border-gray-200/30 dark:border-white/20">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white">
-                  Interview Chat
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Real-time conversation log
-                </p>
-              </div>
-
-              {/* Chat Messages */}
-              <div className="flex-1 p-4 space-y-3 overflow-y-auto">
-                {/* AI Message */}
-                <div className="flex justify-start">
-                  <div className="max-w-xs bg-blue-50 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-lg p-3">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
-                      AI Interviewer
-                    </div>
-                    <div className="text-sm text-blue-800 dark:text-blue-200">
-                      Hello! I've analyzed your resume. Let's start with your
-                      introduction. Tell me about yourself and your background.
-                    </div>
-                  </div>
-                </div>
-
-                {/* User Message */}
-                <div className="flex justify-end">
-                  <div className="max-w-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
-                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">
-                      You
-                    </div>
-                    <div className="text-sm text-gray-800 dark:text-gray-200">
-                      Thank you for having me. I'm a software engineer with 3
-                      years of experience in full-stack development.
-                    </div>
-                  </div>
-                </div>
-
-                {/* AI Message */}
-                <div className="flex justify-start">
-                  <div className="max-w-xs bg-blue-50 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/30 rounded-lg p-3">
-                    <div className="text-xs text-blue-600 dark:text-blue-400 font-medium mb-1">
-                      AI Interviewer
-                    </div>
-                    <div className="text-sm text-blue-800 dark:text-blue-200">
-                      Great! Can you walk me through a challenging project
-                      you've worked on recently?
-                    </div>
-                  </div>
-                </div>
-
-                {/* User Message */}
-                <div className="flex justify-end">
-                  <div className="max-w-xs bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3">
-                    <div className="text-xs text-gray-600 dark:text-gray-400 font-medium mb-1">
-                      You
-                    </div>
-                    <div className="text-sm text-gray-800 dark:text-gray-200">
-                      I recently built a real-time chat application using React
-                      and Node.js with WebSocket integration.
+                    <div
+                      className={`flex items-center space-x-2 ${
+                        isDarkMode ? "text-slate-400" : "text-slate-500"
+                      }`}>
+                      <Star className="w-4 h-4" />
+                      <span className="text-sm">Rate difficulty</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* AI Interview Features */}
-              <div className="p-4 border-t border-gray-200/30 dark:border-white/20 space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
-                  AI Features
-                </h4>
+              {/* Current Question */}
 
-                <div className="space-y-2">
-                  <button className="w-full flex items-center space-x-2 px-3 py-2 bg-blue-50 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/30 transition-all duration-200">
-                    <Users className="w-4 h-4" />
-                    <span className="text-sm">Ask AI Question</span>
-                  </button>
-
-                  <button className="w-full flex items-center space-x-2 px-3 py-2 bg-green-50 dark:bg-green-500/20 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-100 dark:hover:bg-green-500/30 transition-all duration-200">
-                    <CheckCircle className="w-4 h-4" />
-                    <span className="text-sm">Get Feedback</span>
-                  </button>
-
-                  <button className="w-full flex items-center space-x-2 px-3 py-2 bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-100 dark:hover:bg-purple-500/30 transition-all duration-200">
-                    <AlertCircle className="w-4 h-4" />
-                    <span className="text-sm">Hint</span>
-                  </button>
+              {/* Action Buttons */}
+              <div
+                className={`flex items-center justify-between flex-shrink-0 p-4 rounded-lg border ${
+                  isDarkMode
+                    ? "bg-slate-800 border-slate-700"
+                    : "bg-slate-50 border-slate-200"
+                }`}>
+                {/* Interview Tags - Left Side */}
+                <div className="flex items-center space-x-3">
+                  <span
+                    className={`px-3 py-1.5 rounded text-sm font-medium ${
+                      isDarkMode
+                        ? "bg-slate-700 text-slate-300 border border-slate-600"
+                        : "bg-slate-200 text-slate-700 border border-slate-300"
+                    }`}>
+                    Entry Level
+                  </span>
+                  <span
+                    className={`px-3 py-1.5 rounded text-sm font-medium ${
+                      isDarkMode
+                        ? "bg-slate-700 text-slate-300 border border-slate-600"
+                        : "bg-slate-200 text-slate-700 border border-slate-300"
+                    }`}>
+                    Frontend
+                  </span>
+                  <span
+                    className={`px-3 py-1.5 rounded text-sm font-medium ${
+                      isDarkMode
+                        ? "bg-slate-700 text-slate-300 border border-slate-600"
+                        : "bg-slate-200 text-slate-700 border border-slate-300"
+                    }`}>
+                    Easy
+                  </span>
                 </div>
-              </div>
 
-              {/* Chat Input */}
-              <div className="p-4 border-t border-gray-200/30 dark:border-white/20">
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    placeholder="Type your message..."
-                    className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
-                  />
-                  <button className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-all duration-200">
-                    <Users className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* End Interview Button - Right Side */}
+                <button
+                  onClick={handleEndInterview}
+                  className={`px-4 py-2 rounded text-sm font-medium transition-all duration-200 ${
+                    isDarkMode
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
+                  }`}>
+                  End Interview
+                </button>
               </div>
             </div>
           </div>
         </div>
+
+        {/* Right Panel - Transcript */}
+        <div
+          className={`w-[30%] flex flex-col border-l ${
+            isDarkMode
+              ? "bg-slate-800 border-slate-700"
+              : "bg-white border-slate-200"
+          }`}>
+          {/* Transcript Header */}
+          <div
+            className={`px-6 py-4 border-b flex-shrink-0 flex items-center justify-between ${
+              isDarkMode
+                ? "bg-slate-800 border-slate-700"
+                : "bg-white border-slate-200"
+            }`}>
+            {/* Left Side - Text */}
+            <div>
+              <h3
+                className={`text-lg font-semibold mb-1 ${
+                  isDarkMode ? "text-white" : "text-slate-900"
+                }`}>
+                Interview Transcript
+              </h3>
+              <p
+                className={`text-sm ${
+                  isDarkMode ? "text-slate-400" : "text-slate-600"
+                }`}>
+                Real-time conversation log
+              </p>
+            </div>
+
+            {/* Right Side - Theme Toggle Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowThemeMenu(!showThemeMenu)}
+                className={`p-2 rounded-lg transition-all duration-200 border ${
+                  isDarkMode
+                    ? "bg-slate-700 border-slate-600 hover:bg-slate-600"
+                    : "bg-slate-100 border-slate-300 hover:bg-slate-200"
+                }`}>
+                <Palette
+                  className={`w-5 h-5 ${
+                    isDarkMode ? "text-slate-300" : "text-slate-600"
+                  }`}
+                />
+              </button>
+
+              {/* Theme Menu */}
+              <AnimatePresence>
+                {showThemeMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    className={`absolute right-0 top-12 rounded-lg shadow-xl border py-2 z-50 min-w-[120px] ${
+                      isDarkMode
+                        ? "bg-slate-800 border-slate-700"
+                        : "bg-white border-slate-200"
+                    }`}>
+                    <button
+                      onClick={() => handleThemeChange("light")}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center space-x-2 transition-colors ${
+                        !isDarkMode
+                          ? "bg-slate-100 text-slate-700"
+                          : "text-slate-300 hover:bg-slate-700"
+                      }`}>
+                      <Sun className="w-4 h-4" />
+                      <span>Light</span>
+                    </button>
+                    <button
+                      onClick={() => handleThemeChange("dark")}
+                      className={`w-full px-4 py-2 text-left text-sm flex items-center space-x-2 transition-colors ${
+                        isDarkMode
+                          ? "bg-slate-100 text-slate-700"
+                          : "text-slate-700 hover:bg-slate-100"
+                      }`}>
+                      <Moon className="w-4 h-4" />
+                      <span>Dark</span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Chat Messages */}
+          <div
+            className={`flex-1 p-6 space-y-4 overflow-y-auto min-h-0 ${
+              isDarkMode ? "bg-slate-800" : "bg-slate-50"
+            }`}>
+            {chatMessages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${
+                  message.type === "user" ? "justify-end" : "justify-start"
+                }`}>
+                <div
+                  className={`max-w-[85%] rounded-lg p-4 ${
+                    message.type === "user"
+                      ? isDarkMode
+                        ? "bg-slate-700 text-white border border-slate-600"
+                        : "bg-slate-700 text-white border border-slate-600"
+                      : isDarkMode
+                      ? "bg-slate-700 text-slate-200 border border-slate-600"
+                      : "bg-white text-slate-700 border border-slate-300"
+                  }`}>
+                  <div className="flex items-start space-x-3">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                        message.type === "user"
+                          ? "bg-slate-600"
+                          : isDarkMode
+                          ? "bg-slate-600"
+                          : "bg-slate-200"
+                      }`}>
+                      {message.type === "ai" ? (
+                        <Bot
+                          className={`w-4 h-4 ${
+                            isDarkMode ? "text-slate-300" : "text-slate-600"
+                          }`}
+                        />
+                      ) : (
+                        <User className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <span
+                          className={`text-sm font-medium ${
+                            isDarkMode ? "text-slate-300" : "text-slate-600"
+                          }`}>
+                          {message.type === "ai" ? "AI Assistant" : "You"}
+                        </span>
+                        <span
+                          className={`text-xs ${
+                            isDarkMode ? "text-slate-500" : "text-slate-500"
+                          }`}>
+                          {message.timestamp}
+                        </span>
+                      </div>
+                      <div
+                        className={`text-sm leading-relaxed ${
+                          isDarkMode ? "text-slate-200" : "text-slate-700"
+                        }`}>
+                        {message.message}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Chat Input */}
+          <div
+            className={`p-6 border-t flex-shrink-0 ${
+              isDarkMode
+                ? "bg-slate-800 border-slate-700"
+                : "bg-white border-slate-200"
+            }`}>
+            <div className="flex items-end space-x-3">
+              <div className="flex-1">
+                <textarea
+                  placeholder="Type your answer here..."
+                  rows={3}
+                  className={`w-full px-4 py-3 text-sm border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 ${
+                    isDarkMode
+                      ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                      : "bg-white border-slate-300 text-slate-900 placeholder-slate-500"
+                  }`}
+                />
+              </div>
+              <button
+                className={`px-4 py-3 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                  isDarkMode
+                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                    : "bg-slate-700 text-white hover:bg-slate-800"
+                }`}>
+                <Send className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* AI Modal */}
+      <AnimatePresence>
+        {showAIModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`rounded-2xl p-8 max-w-lg w-full mx-4 shadow-2xl ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+              <div className="text-center">
+                <div
+                  className={`w-24 h-24 rounded-full border-4 shadow-2xl mx-auto mb-4 overflow-hidden ${
+                    isDarkMode ? "border-slate-600" : "border-slate-300"
+                  }`}>
+                  <Image
+                    src={AiImage}
+                    alt="AI Interviewer"
+                    width={96}
+                    height={96}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <h3
+                  className={`text-2xl font-bold mb-2 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  AI Interviewer
+                </h3>
+                <p
+                  className={`mb-6 ${
+                    isDarkMode ? "text-slate-300" : "text-slate-600"
+                  }`}>
+                  Hello! I'm your AI interviewer. I'll guide you through this
+                  interview process, ask questions, and provide feedback on your
+                  answers. I'm here to make this experience as helpful and
+                  realistic as possible.
+                </p>
+                <div className="space-y-3">
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isDarkMode ? "bg-slate-700" : "bg-slate-100"
+                    }`}>
+                    <span
+                      className={`text-sm font-medium ${
+                        isDarkMode ? "text-slate-300" : "text-slate-700"
+                      }`}>
+                      Status:
+                    </span>
+                    <span
+                      className={`text-sm font-medium ${
+                        isRecording
+                          ? "text-green-500"
+                          : isDarkMode
+                          ? "text-slate-300"
+                          : "text-slate-700"
+                      }`}>
+                      {isRecording
+                        ? "Listening to your answer..."
+                        : "Ready to speak..."}
+                    </span>
+                  </div>
+                  <div
+                    className={`flex items-center justify-between p-3 rounded-lg ${
+                      isDarkMode ? "bg-slate-700" : "bg-slate-100"
+                    }`}>
+                    <span
+                      className={`text-sm font-medium ${
+                        isDarkMode ? "text-slate-300" : "text-slate-700"
+                      }`}>
+                      Current Question:
+                    </span>
+                    <span
+                      className={`text-sm ${
+                        isDarkMode ? "text-slate-400" : "text-slate-600"
+                      }`}>
+                      Question {currentQuestion}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowAIModal(false)}
+                  className={`mt-6 px-6 py-3 rounded-lg transition-all duration-200 font-medium ${
+                    isDarkMode
+                      ? "bg-slate-700 text-white hover:bg-slate-600"
+                      : "bg-slate-700 text-white hover:bg-slate-800"
+                  }`}>
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Exit Confirmation Modal */}
+      <AnimatePresence>
+        {showExitConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl ${
+                isDarkMode ? "bg-slate-800" : "bg-white"
+              }`}>
+              <div className="text-center">
+                <div
+                  className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                    isDarkMode ? "bg-red-500/20" : "bg-red-100"
+                  }`}>
+                  <AlertCircle className="w-8 h-8 text-red-500" />
+                </div>
+                <h3
+                  className={`text-xl font-bold mb-2 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  Exit Interview?
+                </h3>
+                <p
+                  className={`mb-6 ${
+                    isDarkMode ? "text-slate-300" : "text-slate-600"
+                  }`}>
+                  Are you sure you want to exit? If you exit now, you won't be
+                  able to continue this interview again.
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={cancelExitInterview}
+                    className={`flex-1 px-4 py-3 border rounded-lg transition-all duration-200 font-medium ${
+                      isDarkMode
+                        ? "border-slate-600 text-slate-300 hover:bg-slate-700"
+                        : "border-slate-300 text-slate-700 hover:bg-slate-100"
+                    }`}>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmExitInterview}
+                    className="flex-1 px-4 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 font-medium">
+                    Exit Interview
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -959,78 +959,65 @@ const AnalyticsDashboard = () => {
   return (
     <div className="h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900 overflow-hidden">
       {/* Top Header Bar */}
-      <div className="h-16 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-gray-200/20 dark:border-white/10 shadow-sm flex items-center justify-between px-6">
-        <div className="flex items-center space-x-6">
+      <div className="h-12 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-gray-200/20 dark:border-white/10 shadow-sm flex items-center justify-between px-4">
+        <div className="flex items-center space-x-3">
           <button
             onClick={() => router.back()}
-            className="flex items-center space-x-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
-            <ArrowLeft className="w-5 h-5" />
-            <span className="font-medium">Back</span>
+            className="flex items-center space-x-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-200">
+            <ArrowLeft className="w-4 h-4" />
+            <span className="text-sm font-medium hidden sm:inline">Back</span>
           </button>
-          <div className="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
-          {/* <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {selectedAnalyticsType === "resume" && "Resume Analytics"}
-            {selectedAnalyticsType === "job-description" &&
-              "Job Description Analytics"}
-            {selectedAnalyticsType === "company" && "Company Analytics"}
-            {selectedAnalyticsType === "topic-interview" &&
-              "Topic Interview Analytics"}
-          </h1> */}
+          <div className="h-4 w-px bg-gray-300 dark:bg-gray-600"></div>
           {/* Analytics Type Selector */}
-          <div className="p-6 border-b border-gray-200/20 dark:border-white/10">
-            {/* <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-              Analytics Type
-            </h2> */}
-            <div className="relative ">
-              <select
-                value={selectedAnalyticsType}
-                onChange={(e) => handleAnalyticsTypeChange(e.target.value)}
-                className="w-full pr-10 pl-5 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none cursor-pointer">
-                {analyticsTypes.map((type) => {
-                  const IconComponent = type.icon;
-                  return (
-                    <option key={type.id} value={type.id} className="py-2">
-                      {type.label}
-                    </option>
-                  );
-                })}
-              </select>
-              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                <ChevronDown className="w-5 h-5 text-gray-400" />
-              </div>
+          <div className="relative">
+            <select
+              value={selectedAnalyticsType}
+              onChange={(e) => handleAnalyticsTypeChange(e.target.value)}
+              className="w-48 sm:w-64 pr-8 pl-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none cursor-pointer">
+              {analyticsTypes.map((type) => {
+                const IconComponent = type.icon;
+                return (
+                  <option key={type.id} value={type.id} className="py-1">
+                    {type.label}
+                  </option>
+                );
+              })}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+              <ChevronDown className="w-4 h-4 text-gray-400" />
             </div>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <button className="w-10 h-10 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-xl flex items-center justify-center transition-all duration-200">
-            <Bell className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+        <div className="flex items-center space-x-2">
+          <button className="w-8 h-8 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-200">
+            <Bell className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
-          <button className="w-10 h-10 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-xl flex items-center justify-center transition-all duration-200">
-            <Settings className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+          <button className="w-8 h-8 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-200">
+            <Settings className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
           <button
             onClick={toggleTheme}
-            className="w-10 h-10 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-xl flex items-center justify-center transition-all duration-200">
+            className="w-8 h-8 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-200">
             {isDarkMode ? (
-              <Sun className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+              <Sun className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
             ) : (
-              <Moon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              <Moon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             )}
           </button>
-          <button className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center transition-all duration-200">
-            <User className="w-5 h-5 text-white" />
+          <button className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center transition-all duration-200">
+            <User className="w-4 h-4 text-white" />
           </button>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex h-[calc(100vh-4rem)]">
+      <div className="flex h-[calc(100vh-3rem)]">
         {/* Left Sidebar - Job Description Interview */}
-        <div className="w-96 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-r border-gray-200/20 dark:border-white/10 shadow-xl flex flex-col">
+        <div className="w-1/4 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-r border-gray-200/20 dark:border-white/10 shadow-xl flex flex-col">
           {/* Job Description Interview Section */}
-          <div className="p-6 border-b border-gray-200/20 dark:border-white/10">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          <div className="p-4 border-b border-gray-200/20 dark:border-white/10">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">
               {selectedAnalyticsType === "resume" && "Resume Interview"}
               {selectedAnalyticsType === "job-description" &&
                 "Job Description Interview"}
@@ -1039,8 +1026,8 @@ const AnalyticsDashboard = () => {
             </h2>
 
             {/* Search Bar - Fixed positioning to prevent overlap */}
-            <div className="relative mb-6">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
                 placeholder={
@@ -1054,38 +1041,38 @@ const AnalyticsDashboard = () => {
                 }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                className="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
               />
             </div>
 
             {/* Analytics Data List - Scrollable with fixed height */}
-            <div className="h-48 overflow-y-auto custom-scrollbar">
-              <div className="space-y-3 pl-1 pr-2 py-1">
+            <div className="h-72 overflow-y-auto custom-scrollbar">
+              <div className="space-y-2 pl-1 pr-2 py-1">
                 {currentAnalyticsData.map((item) => (
                   <div
                     key={item.id}
                     onClick={() => handleJobDescriptionClick(item.id)}
-                    className={`p-3 rounded-xl border transition-all duration-200 cursor-pointer ${
+                    className={`p-2 rounded-lg border transition-all duration-200 cursor-pointer ${
                       selectedJobDescription === item.id
                         ? "bg-gradient-to-br from-blue-50/80 to-purple-50/80 dark:from-blue-900/30 dark:to-purple-900/30 shadow-lg ring-1 ring-purple-200 dark:ring-purple-500/50"
                         : "bg-white dark:bg-white/5 border-gray-200 dark:border-white/20 hover:bg-gray-50 dark:hover:bg-white/10"
                     }`}>
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <span className="font-medium text-gray-900 dark:text-white text-sm block">
+                        <span className="font-medium text-gray-900 dark:text-white text-xs block">
                           {item.name}
                         </span>
                         {item.category && (
-                          <span className="text-xs text-gray-500 dark:text-gray-400 block mt-1">
+                          <span className="text-xs text-gray-500 dark:text-gray-400 block mt-0.5">
                             {item.category}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="text-xs font-bold text-green-600 dark:text-green-400">
                           {item.correct}
                         </span>
-                        <span className="text-sm font-bold text-red-600 dark:text-red-400">
+                        <span className="text-xs font-bold text-red-600 dark:text-red-400">
                           {item.incorrect}
                         </span>
                       </div>
@@ -1097,38 +1084,41 @@ const AnalyticsDashboard = () => {
           </div>
 
           {/* Interview Levels Section - Fixed positioning */}
-          <div className="p-6 border-b border-gray-200/20 dark:border-white/10">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+          <div className="p-4 border-b border-gray-200/20 dark:border-white/10">
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3">
               Interview Levels
             </h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {interviewLevels.map((level) => (
                 <button
                   key={level.id}
                   onClick={() => setSelectedLevel(level.id)}
-                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 whitespace-nowrap ${
                     selectedLevel === level.id
                       ? "bg-gradient-to-r from-blue-500 to-purple-600 text-white ring-1 ring-purple-200 dark:ring-purple-500/50"
                       : "bg-gray-100 dark:bg-white/10 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/20"
                   }`}>
                   {level.label}
+                  <span className="ml-1.5 text-xs opacity-75">
+                    ({level.count})
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Interview Cards Section - Scrollable with fixed height */}
-          <div className="flex-1 p-6 overflow-hidden">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+          <div className="flex-1 p-4 overflow-hidden">
+            <h3 className="text-base font-bold text-gray-900 dark:text-white mb-3">
               Interview Details
             </h3>
-            <div className="h-full overflow-y-auto custom-scrollbar pt-2 pb-10">
-              <div className="space-y-3 pr-2">
+            <div className="h-full overflow-y-auto custom-scrollbar pt-1 pb-8">
+              <div className="space-y-2 pr-2">
                 {currentInterviews.map((card) => (
                   <div
                     key={card.id}
                     onClick={() => handleInterviewClick(card.id)}
-                    className={`p-4 rounded-xl border transition-all duration-200 cursor-pointer ${
+                    className={`p-2 rounded-lg border transition-all duration-200 cursor-pointer ${
                       selectedInterview === card.id
                         ? "ring-1 ring-purple-200 dark:ring-purple-500/50 bg-gradient-to-br from-blue-50/80 to-purple-50/80 dark:from-blue-900/30 dark:to-purple-900/30 shadow-lg"
                         : ""
@@ -1137,24 +1127,24 @@ const AnalyticsDashboard = () => {
                         ? "bg-red-50 dark:bg-red-500/20 border-red-200 dark:border-red-500/30"
                         : "bg-white dark:bg-white/5 border-gray-200 dark:border-white/20"
                     }`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-bold text-gray-900 dark:text-white text-sm">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-gray-900 dark:text-white text-xs">
                         {card.id}. {card.name}
                       </span>
                       {card.status === "warning" && (
-                        <AlertTriangle className="w-5 h-5 text-red-500" />
+                        <AlertTriangle className="w-4 h-4 text-red-500" />
                       )}
                     </div>
-                    <div className=" flex flex-row gap-2 items-center  text-[10px]">
-                      <div className="flex flex-row items-center gap-2 ">
+                    <div className="flex flex-row gap-2 items-center text-xs">
+                      <div className="flex flex-row items-center gap-1">
                         <span className="text-gray-600 dark:text-gray-400">
-                          Time Taken:
+                          Time:
                         </span>
                         <span className="font-bold text-gray-900 dark:text-white">
                           {card.timeTaken}
                         </span>
                       </div>
-                      <div className="flex flex-row items-center gap-2 ">
+                      <div className="flex flex-row items-center gap-1">
                         <span className="text-gray-600 dark:text-gray-400">
                           Points:
                         </span>
@@ -1162,7 +1152,7 @@ const AnalyticsDashboard = () => {
                           {card.points}
                         </span>
                       </div>
-                      <div className="flex flex-row items-center gap-2 ">
+                      <div className="flex flex-row items-center gap-1">
                         <span className="text-gray-600 dark:text-gray-400">
                           Cheating:
                         </span>
@@ -1186,22 +1176,22 @@ const AnalyticsDashboard = () => {
         {/* Center Content - Fixed Graphs + Scrollable Questions */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Fixed Graphs Section */}
-          <div className="h-80 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-gray-200/20 dark:border-white/10 p-6">
-            <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="h-88 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md border-b border-gray-200/20 dark:border-white/10 p-4">
+            <div className="h-full grid grid-cols-1 lg:grid-cols-3 gap-4 pb-4">
               {/* Average Points Chart */}
-              <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-2xl p-6 border border-blue-200/20 dark:border-blue-500/20">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-blue-200/20 dark:border-blue-500/20">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
                   Average Points by Topic and Level
                 </h3>
-                <div className="h-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 flex items-center justify-center">
+                <div className="h-full bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <BarChart3 className="w-10 h-10 text-white" />
+                    <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                      <BarChart3 className="w-8 h-8 text-white" />
                     </div>
-                    <p className="text-gray-600 dark:text-gray-400 font-medium">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
                       Chart visualization
                     </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                       Y-axis: 103.00 - 232.00
                     </p>
                   </div>
@@ -1209,20 +1199,40 @@ const AnalyticsDashboard = () => {
               </div>
 
               {/* Total Interviews Chart */}
-              <div className="bg-gradient-to-br from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-2xl p-6 border border-green-200/20 dark:border-green-500/20">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+              <div className="bg-gradient-to-br from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 rounded-xl p-4 border border-green-200/20 dark:border-green-500/20">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
                   Total Interviews Count by Topic
                 </h3>
-                <div className="h-full bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 flex items-center justify-center">
+                <div className="h-full bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center">
                   <div className="text-center">
-                    <div className="w-20 h-20 bg-gradient-to-r from-green-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                      <BarChart3 className="w-10 h-10 text-white" />
+                    <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                      <BarChart3 className="w-8 h-8 text-white" />
                     </div>
-                    <p className="text-gray-600 dark:text-gray-400 font-medium">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
                       Chart visualization
                     </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                       Mock 0, Mock 0, Mock 0...
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Performance Trends Chart */}
+              <div className="bg-gradient-to-br from-orange-50 to-red-50 dark:from-orange-900/20 dark:to-red-900/20 rounded-xl p-4 border border-orange-200/20 dark:border-orange-500/20">
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">
+                  Performance Trends Over Time
+                </h3>
+                <div className="h-full bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-600 rounded-xl flex items-center justify-center mx-auto mb-3">
+                      <TrendingUp className="w-8 h-8 text-white" />
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                      Chart visualization
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Time series data
                     </p>
                   </div>
                 </div>
@@ -1231,8 +1241,8 @@ const AnalyticsDashboard = () => {
           </div>
 
           {/* Scrollable Questions Section */}
-          <div className="flex-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md p-6 overflow-hidden">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-6">
+          <div className="flex-1 bg-white/90 dark:bg-slate-800/90 backdrop-blur-md p-4 overflow-hidden">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
               {selectedAnalyticsType === "resume" &&
                 "Resume Questions & Analysis"}
               {selectedAnalyticsType === "job-description" &&
@@ -1242,49 +1252,49 @@ const AnalyticsDashboard = () => {
               {selectedAnalyticsType === "topic-interview" &&
                 "Topic Questions & Analysis"}
             </h3>
-            <div className="h-full overflow-y-auto custom-scrollbar ">
-              <div className="space-y-4 px-2 pt-2 pb-10">
+            <div className="h-full overflow-y-auto custom-scrollbar">
+              <div className="space-y-3 px-1 pt-1 pb-8">
                 {questions.map((question) => (
                   <div
                     key={question.id}
                     onClick={() => handleQuestionClick(question.id)}
-                    className={`border border-gray-200 dark:border-gray-600 rounded-xl overflow-hidden hover:shadow-md transition-all duration-200 cursor-pointer ${
+                    className={`border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden hover:shadow-md transition-all duration-200 cursor-pointer ${
                       selectedQuestion === question.id
                         ? "ring-1 ring-purple-200 dark:ring-purple-500/50 bg-gradient-to-br from-blue-50/80 to-purple-50/80 dark:from-blue-900/30 dark:to-purple-900/30 shadow-lg"
                         : ""
                     }`}>
-                    <div className="p-5 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200">
+                    <div className="p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-all duration-200">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-4">
-                          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-6 h-6 bg-gradient-to-r from-blue-500 to-purple-600 rounded-md flex items-center justify-center text-white font-bold text-xs">
                             {question.id}
                           </div>
                           <div className="flex-1">
-                            <h4 className="font-medium text-gray-900 dark:text-white mb-2">
+                            <h4 className="font-medium text-gray-900 dark:text-white mb-1 text-sm">
                               {question.title}
                             </h4>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
+                            <div className="flex items-center space-x-3 text-xs text-gray-600 dark:text-gray-400">
                               <span className="flex items-center space-x-1">
-                                <Target className="w-4 h-4" />
+                                <Target className="w-3 h-3" />
                                 <span>{question.difficulty}</span>
                               </span>
                               <span className="flex items-center space-x-1">
-                                <BookOpen className="w-4 h-4" />
+                                <BookOpen className="w-3 h-3" />
                                 <span>{question.category}</span>
                               </span>
                               <span className="flex items-center space-x-1">
-                                <Clock className="w-4 h-4" />
+                                <Clock className="w-3 h-3" />
                                 <span>{question.timeSpent}</span>
                               </span>
                               <span className="flex items-center space-x-1">
-                                <Award className="w-4 h-4" />
+                                <Award className="w-3 h-3" />
                                 <span>{question.points}/10</span>
                               </span>
                             </div>
                           </div>
                         </div>
                         <div className="flex-shrink-0">
-                          <ChevronDown className="w-5 h-5 text-gray-500 dark:text-gray-400" />
+                          <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                         </div>
                       </div>
                     </div>
@@ -1310,27 +1320,27 @@ const AnalyticsDashboard = () => {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="fixed right-0 top-0 h-full w-96 bg-white dark:bg-slate-800 shadow-2xl border-l border-gray-200 dark:border-white/20 overflow-hidden z-[10000]"
+              className="fixed right-0 top-0 h-full w-72 lg:w-1/4 bg-white dark:bg-slate-800 shadow-2xl border-l border-gray-200 dark:border-white/20 overflow-hidden z-[10000]"
               onClick={(e) => e.stopPropagation()}>
               {/* Sidebar Header */}
-              <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-white/20 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/20 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20">
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white">
                   Question Analysis
                 </h2>
                 <button
                   onClick={closeModal}
-                  className="w-8 h-8 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-200">
-                  <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                  className="w-7 h-7 bg-gray-100 dark:bg-white/10 hover:bg-gray-200 dark:hover:bg-white/20 rounded-lg flex items-center justify-center transition-all duration-200">
+                  <X className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
                 </button>
               </div>
 
               {/* Sidebar Content */}
-              <div className="h-[calc(100vh-6rem)] overflow-y-auto custom-scrollbar pb-6">
+              <div className="h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar pb-4">
                 {selectedQuestion && (
-                  <div className="p-4 space-y-4">
+                  <div className="p-3 space-y-3">
                     {/* Question Details */}
-                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3">
-                      <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-sm">
+                    <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
+                      <h4 className="font-semibold text-gray-900 dark:text-white mb-2 text-xs">
                         {
                           questionAnalysis[
                             selectedQuestion as keyof typeof questionAnalysis
