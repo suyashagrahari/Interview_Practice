@@ -75,7 +75,7 @@ export const useSignUp = () => {
         });
         
         toast.success('Account created successfully!');
-        router.push('/dashboard');
+        router.push('/resume-interview');
       }
     },
     onError: (error: any) => {
@@ -103,7 +103,7 @@ export const useSignIn = () => {
         });
         
         toast.success('Welcome back!');
-        router.push('/dashboard');
+        router.push('/resume-interview');
       }
     },
     onError: (error: any) => {
@@ -131,7 +131,7 @@ export const useGoogleSignIn = () => {
         });
         
         toast.success('Signed in with Google successfully!');
-        router.push('/dashboard');
+        router.push('/resume-interview');
       }
     },
     onError: (error: any) => {
