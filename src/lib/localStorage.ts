@@ -66,9 +66,13 @@ export interface StoredUserData {
 
 const USER_STORAGE_KEY = 'interview_user_data';
 
+// Check if we're in a browser environment
+const isClient = typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+
 // Unified user data storage (includes profile data)
 export const userStorage = {
   set: (userData: StoredUserData) => {
+    if (!isClient) return;
     try {
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userData));
     } catch (error) {
@@ -77,6 +81,7 @@ export const userStorage = {
   },
 
   get: (): StoredUserData | null => {
+    if (!isClient) return null;
     try {
       const data = localStorage.getItem(USER_STORAGE_KEY);
       return data ? JSON.parse(data) : null;
@@ -87,6 +92,7 @@ export const userStorage = {
   },
 
   remove: () => {
+    if (!isClient) return;
     try {
       localStorage.removeItem(USER_STORAGE_KEY);
     } catch (error) {
@@ -96,6 +102,7 @@ export const userStorage = {
 
   // Update specific section of profile data
   updateProfileSection: (section: keyof StoredUserData['profile'], data: any) => {
+    if (!isClient) return;
     try {
       const currentData = userStorage.get();
       if (currentData) {
@@ -116,6 +123,7 @@ export const userStorage = {
 
   // Update basic user info
   updateUserInfo: (userInfo: Partial<Omit<StoredUserData, 'profile' | 'lastUpdated'>>) => {
+    if (!isClient) return;
     try {
       const currentData = userStorage.get();
       if (currentData) {
@@ -133,6 +141,7 @@ export const userStorage = {
 
   // Check if user data exists and is recent (within 24 hours)
   isRecent: (): boolean => {
+    if (!isClient) return false;
     try {
       const data = userStorage.get();
       if (!data || !data.lastUpdated) return false;
@@ -150,6 +159,7 @@ export const userStorage = {
 
   // Deduplicate arrays in profile data
   deduplicateProfileData: (userData: StoredUserData): StoredUserData => {
+    if (!isClient) return userData;
     try {
       const deduplicatedData = {
         ...userData,
@@ -184,6 +194,7 @@ export const userStorage = {
 
 // Clear all stored data (useful for logout)
 export const clearAllStorage = () => {
+  if (!isClient) return;
   try {
     userStorage.remove();
     console.log('✅ All user data cleared from localStorage on logout');
@@ -233,6 +244,7 @@ export const initializeUserData = (userData: any): StoredUserData => {
 // Legacy compatibility - for backward compatibility with existing code
 export const profileStorage = {
   get: () => {
+    if (!isClient) return null;
     const userData = userStorage.get();
     if (!userData) return null;
     
