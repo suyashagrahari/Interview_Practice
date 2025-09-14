@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
+import { ResumeApiService, InterviewApiService } from "@/lib/api";
 
 interface ResumeBasedInterviewProps {
   onBack?: () => void;
@@ -82,11 +83,21 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     scheduledDate: "",
     scheduledTime: "",
     interviewerId: "",
+    interviewer: {
+      name: "",
+      numberOfInterviewers: 1,
+      experience: "",
+      bio: "",
+    },
     companyName: "",
     experienceLevel: "",
     skills: [] as string[],
     additionalNotes: "",
   });
+
+  // Resume and interview states
+  const [selectedResumeId, setSelectedResumeId] = useState<string | null>(null);
+  const [isStartingInterview, setIsStartingInterview] = useState(false);
 
   // Resume selection states
   const [resumeOptions, setResumeOptions] = useState([
@@ -107,7 +118,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
   const [isResumeNameSubmitted, setIsResumeNameSubmitted] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Mock interviewers data
+  // Mock interviewers data with complete details
   const interviewers = [
     {
       id: "1",
@@ -117,6 +128,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       rating: 4.8,
       specialties: ["React", "Node.js", "System Design"],
       experience: "8 years",
+      bio: "Senior software engineer with 8+ years of experience in full-stack development. Expert in React, Node.js, and system design. Passionate about mentoring junior developers and building scalable applications.",
+      numberOfInterviewers: 1,
     },
     {
       id: "2",
@@ -126,6 +139,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       rating: 4.9,
       specialties: ["Python", "AWS", "Architecture"],
       experience: "10 years",
+      bio: "Tech Lead with 10+ years of experience in cloud architecture and Python development. Specializes in AWS services, microservices architecture, and team leadership. Known for conducting comprehensive technical interviews.",
+      numberOfInterviewers: 2,
     },
     {
       id: "3",
@@ -135,6 +150,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       rating: 4.7,
       specialties: ["Leadership", "Product Management", "Agile"],
       experience: "12 years",
+      bio: "Engineering Manager with 12+ years of experience in software development and team leadership. Expert in agile methodologies, product management, and building high-performing engineering teams.",
+      numberOfInterviewers: 1,
     },
     {
       id: "4",
@@ -144,6 +161,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       rating: 4.6,
       specialties: ["JavaScript", "React", "MongoDB"],
       experience: "6 years",
+      bio: "Full Stack Developer with 6+ years of experience in modern web technologies. Expert in JavaScript, React, and MongoDB. Passionate about clean code and best practices in software development.",
+      numberOfInterviewers: 1,
     },
     {
       id: "5",
@@ -153,27 +172,38 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       rating: 4.8,
       specialties: ["Java", "Spring", "Microservices"],
       experience: "9 years",
+      bio: "Senior Engineer with 9+ years of experience in Java development and microservices architecture. Expert in Spring framework, distributed systems, and enterprise application development.",
+      numberOfInterviewers: 2,
     },
   ];
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setIsUploading(true);
-      setUploadProgress(0);
+      // Validate file type
+      const allowedTypes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+      if (!allowedTypes.includes(file.type)) {
+        alert("Invalid file type. Please upload a PDF, DOC, or DOCX file.");
+        return;
+      }
 
-      // Simulate upload progress
-      const interval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(interval);
-            setIsUploading(false);
-            setUploadedFile(file);
-            return 100;
-          }
-          return prev + 10;
-        });
-      }, 200);
+      // Validate file size (5MB limit)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        alert("File size exceeds 5MB limit.");
+        return;
+      }
+
+      // Just store the file, don't upload yet
+      setUploadedFile(file);
+      setFormData((prev) => ({
+        ...prev,
+        resumeName: file.name.replace(/\.[^/.]+$/, ""), // Set default name from filename
+      }));
     }
   };
 
@@ -224,7 +254,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     }
   };
 
-  const handleResumeNameSubmit = () => {
+  const handleResumeNameSubmit = async () => {
     // Ensure resumeName is always a string
     const resumeName =
       typeof formData.resumeName === "string" ? formData.resumeName : "";
@@ -233,26 +263,99 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       return;
     }
 
-    // Add the new resume name to options if it doesn't exist
-    if (!resumeOptions.includes(resumeName)) {
-      setResumeOptions((prev) => [...prev, resumeName]);
+    if (!uploadedFile) {
+      setShowResumeNameWarning(true);
+      return;
     }
 
-    // Set the selected resume to the entered name
-    setFormData((prev) => ({
-      ...prev,
-      selectedResume: resumeName,
-    }));
-    setResumeSearchTerm(resumeName);
-    setShowResumeNameWarning(false);
+    setIsUploading(true);
+    setUploadProgress(0);
 
-    // Enable all form fields after resume name is submitted
-    setIsResumeNameSubmitted(true);
+    try {
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90; // Stop at 90% until actual upload completes
+          }
+          return prev + 10;
+        });
+      }, 200);
+
+      // Upload the file with the custom resume name
+      const response = await ResumeApiService.uploadResume({
+        resume: uploadedFile,
+        resumeName: resumeName.trim(),
+      });
+
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+
+      // Add the new resume name to options if it doesn't exist
+      if (!resumeOptions.includes(resumeName)) {
+        setResumeOptions((prev) => [...prev, resumeName]);
+      }
+
+      // Store the resume ID for later use
+      setSelectedResumeId(response.data.id);
+
+      // Set the selected resume to the entered name
+      setFormData((prev) => ({
+        ...prev,
+        selectedResume: resumeName,
+      }));
+      setResumeSearchTerm(resumeName);
+      setShowResumeNameWarning(false);
+
+      // Enable all form fields after resume name is submitted
+      setIsResumeNameSubmitted(true);
+
+      console.log("Resume uploaded with custom name:", response.data);
+    } catch (error: any) {
+      console.error("Error uploading resume with custom name:", error);
+      setShowResumeNameWarning(true);
+      alert(error.message || "Failed to upload resume. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const handleResumeSelection = (resumeName: string) => {
+  const handleResumeSelection = async (resumeName: string) => {
     // Ensure resumeName is always a string
     const safeResumeName = typeof resumeName === "string" ? resumeName : "";
+
+    // Get resume ID from stored data
+    let resumeData = (window as any).resumeData;
+
+    // If resume data is not available, fetch it
+    if (!resumeData || !resumeData[safeResumeName]) {
+      console.log("Resume data not found, fetching...");
+      try {
+        const response = await ResumeApiService.getUserResumes();
+        if (response.success && response.data) {
+          resumeData = response.data.reduce(
+            (acc: Record<string, string>, resume: any) => {
+              acc[resume.resumeName] = resume.id;
+              return acc;
+            },
+            {} as Record<string, string>
+          );
+          (window as any).resumeData = resumeData;
+        }
+      } catch (error) {
+        console.error("Error fetching resume details:", error);
+      }
+    }
+
+    if (resumeData && resumeData[safeResumeName]) {
+      setSelectedResumeId(resumeData[safeResumeName]);
+      console.log("Selected resume ID:", resumeData[safeResumeName]);
+    } else {
+      console.warn("Resume ID not found for:", safeResumeName);
+      console.log("Available resumes:", resumeData);
+    }
+
     setFormData((prev) => ({
       ...prev,
       selectedResume: safeResumeName,
@@ -262,6 +365,36 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     setTimeout(() => {
       setShowResumeDropdown(false);
     }, 100);
+  };
+
+  const handleInterviewerSelection = (interviewerId: string) => {
+    console.log("Interviewer selected:", interviewerId);
+
+    // Find the selected interviewer
+    const selectedInterviewer = interviewers.find(
+      (interviewer) => interviewer.id === interviewerId
+    );
+
+    if (selectedInterviewer) {
+      // Update form data with interviewer details
+      setFormData((prev) => ({
+        ...prev,
+        interviewerId: interviewerId,
+        interviewer: {
+          name: selectedInterviewer.name,
+          numberOfInterviewers: selectedInterviewer.numberOfInterviewers,
+          experience: selectedInterviewer.experience,
+          bio: selectedInterviewer.bio,
+        },
+      }));
+
+      console.log("Interviewer details populated:", {
+        name: selectedInterviewer.name,
+        numberOfInterviewers: selectedInterviewer.numberOfInterviewers,
+        experience: selectedInterviewer.experience,
+        bio: selectedInterviewer.bio,
+      });
+    }
   };
 
   const updateDropdownPosition = () => {
@@ -279,15 +412,81 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     option.toLowerCase().includes(resumeSearchTerm.toLowerCase())
   );
 
-  const handleStartInterview = () => {
-    // Check if resume name is provided
-    if (!formData.resumeName.trim()) {
-      setShowResumeNameWarning(true);
+  const handleStartInterview = async () => {
+    console.log("Starting interview with:", {
+      selectedResumeId,
+      selectedResume: formData.selectedResume,
+      resumeSearchTerm,
+    });
+
+    // Check if resume is selected and resume ID is available
+    if (!selectedResumeId) {
+      alert(
+        "Please select a resume from the dropdown or upload a new one first."
+      );
       return;
     }
 
-    // Redirect to full-screen interview page
-    window.location.href = `/interview?type=resume`;
+    // Check required fields
+    if (!formData.jobRole.trim() || !formData.interviewerId.trim()) {
+      alert(
+        "Please fill in all required fields (Job Role and Interviewer ID)."
+      );
+      return;
+    }
+
+    // Check interviewer selection
+    if (!formData.interviewerId.trim()) {
+      alert("Please select an interviewer first.");
+      return;
+    }
+
+    setIsStartingInterview(true);
+
+    try {
+      // Prepare interview data
+      const interviewData = {
+        resumeId: selectedResumeId,
+        interviewType: formData.interviewType as "technical" | "behavioral",
+        level: formData.level,
+        difficultyLevel: formData.difficultyLevel as
+          | "beginner"
+          | "intermediate"
+          | "expert",
+        jobRole: formData.jobRole.trim(),
+        interviewerId: formData.interviewerId.trim(),
+        interviewer: {
+          name: formData.interviewer.name.trim(),
+          numberOfInterviewers: formData.interviewer.numberOfInterviewers,
+          experience: formData.interviewer.experience.trim(),
+          bio: formData.interviewer.bio.trim(),
+        },
+        companyName: formData.companyName.trim() || undefined,
+        experienceLevel: formData.experienceLevel.trim() || undefined,
+        skills: formData.skills.length > 0 ? formData.skills : undefined,
+        additionalNotes: formData.additionalNotes.trim() || undefined,
+        scheduled: formData.scheduled,
+        scheduledDate: formData.scheduledDate || undefined,
+        scheduledTime: formData.scheduledTime || undefined,
+      };
+
+      // Start the interview
+      const response = await InterviewApiService.startInterview(interviewData);
+
+      if (response.success) {
+        // Redirect to interview page with the interview ID
+        window.location.href = `/interview?type=resume&interviewId=${response.data.interviewId}`;
+      } else {
+        alert(
+          response.message || "Failed to start interview. Please try again."
+        );
+      }
+    } catch (error: any) {
+      console.error("Error starting interview:", error);
+      alert(error.message || "Failed to start interview. Please try again.");
+    } finally {
+      setIsStartingInterview(false);
+    }
   };
 
   const handleBackToConfig = () => {
@@ -310,6 +509,32 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     setIsMicOn(!isMicOn);
   };
 
+  // Load user's existing resumes
+  const loadUserResumes = async () => {
+    try {
+      const response = await ResumeApiService.getUserResumes();
+      const userResumes = response.data.map((resume) => resume.resumeName);
+      setResumeOptions((prev) => {
+        const combined = [...new Set([...prev, ...userResumes])];
+        return combined;
+      });
+
+      // Store resume data for easy access
+      const resumeData = response.data.reduce((acc, resume) => {
+        acc[resume.resumeName] = resume.id;
+        return acc;
+      }, {} as Record<string, string>);
+
+      // Store in a ref or state for later use
+      (window as any).resumeData = resumeData;
+      console.log("Loaded user resumes:", userResumes);
+      console.log("Resume data mapping:", resumeData);
+    } catch (error) {
+      console.error("Error loading user resumes:", error);
+      // Don't show error to user as this is not critical
+    }
+  };
+
   // Set client state to prevent hydration mismatch
   useEffect(() => {
     setIsClient(true);
@@ -317,6 +542,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     if (typeof resumeSearchTerm !== "string") {
       setResumeSearchTerm("");
     }
+    // Load user's existing resumes
+    loadUserResumes();
   }, []);
 
   // Close resume dropdown when clicking outside and update position
@@ -499,7 +726,9 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                             </div>
                             <div>
                               <p className="text-base font-medium text-gray-900 dark:text-white">
-                                Uploading...
+                                {uploadProgress < 100
+                                  ? "Uploading & Parsing..."
+                                  : "Processing..."}
                               </p>
                               <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mt-2">
                                 <div
@@ -511,7 +740,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                               </p>
                             </div>
                           </div>
-                        ) : uploadedFile ? (
+                        ) : uploadedFile && isResumeNameSubmitted ? (
                           <div className="space-y-3">
                             <div className="w-12 h-12 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto">
                               <CheckCircle className="w-6 h-6 text-green-500" />
@@ -523,6 +752,29 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                               <p className="text-xs text-gray-500 dark:text-gray-400">
                                 {(uploadedFile.size / 1024 / 1024).toFixed(2)}{" "}
                                 MB
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => setUploadedFile(null)}
+                              className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
+                              Remove file
+                            </button>
+                          </div>
+                        ) : uploadedFile ? (
+                          <div className="space-y-3">
+                            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900/20 rounded-full flex items-center justify-center mx-auto">
+                              <FileText className="w-6 h-6 text-yellow-500" />
+                            </div>
+                            <div>
+                              <p className="text-base font-medium text-gray-900 dark:text-white">
+                                {uploadedFile.name}
+                              </p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {(uploadedFile.size / 1024 / 1024).toFixed(2)}{" "}
+                                MB
+                              </p>
+                              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                Enter resume name and click "Add" to upload
                               </p>
                             </div>
                             <button
@@ -551,7 +803,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                       {/* Resume Name Input - Always visible */}
                       <div>
                         <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                          Resume Name{" "}
+                          Resume Name <span className="text-red-500">*</span>
                         </label>
                         {!uploadedFile ? (
                           <div className="flex gap-2">
@@ -569,7 +821,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                               <span>Add</span>
                             </button>
                           </div>
-                        ) : (
+                        ) : uploadedFile && !isResumeNameSubmitted ? (
                           <div className="flex gap-2">
                             <input
                               type="text"
@@ -603,20 +855,32 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                             {!isResumeNameSubmitted ? (
                               <motion.button
                                 onClick={handleResumeNameSubmit}
-                                disabled={!formData.resumeName.trim()}
+                                disabled={
+                                  !formData.resumeName.trim() || isUploading
+                                }
                                 className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 flex items-center space-x-1 ${
-                                  formData.resumeName.trim()
+                                  formData.resumeName.trim() && !isUploading
                                     ? "bg-blue-500 hover:bg-blue-600 text-white shadow-md hover:shadow-lg"
                                     : "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                                 }`}
                                 whileHover={{
-                                  scale: formData.resumeName.trim() ? 1.02 : 1,
+                                  scale:
+                                    formData.resumeName.trim() && !isUploading
+                                      ? 1.02
+                                      : 1,
                                 }}
                                 whileTap={{
-                                  scale: formData.resumeName.trim() ? 0.98 : 1,
+                                  scale:
+                                    formData.resumeName.trim() && !isUploading
+                                      ? 0.98
+                                      : 1,
                                 }}>
-                                <CheckCircle className="w-4 h-4" />
-                                <span>Add</span>
+                                {isUploading ? (
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                ) : (
+                                  <CheckCircle className="w-4 h-4" />
+                                )}
+                                <span>{isUploading ? "Adding..." : "Add"}</span>
                               </motion.button>
                             ) : (
                               <div className="flex items-center px-3 py-2 text-green-600 dark:text-green-400">
@@ -626,6 +890,21 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                                 </span>
                               </div>
                             )}
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={formData.resumeName || ""}
+                              disabled
+                              className="flex-1 px-3 py-2 text-sm border border-green-500 rounded-lg bg-green-50 dark:bg-green-900/20 text-gray-900 dark:text-white cursor-not-allowed"
+                            />
+                            <div className="flex items-center px-3 py-2 text-green-600 dark:text-green-400">
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              <span className="text-sm font-medium">
+                                Uploaded
+                              </span>
+                            </div>
                           </div>
                         )}
                         {showResumeNameWarning && (
@@ -813,6 +1092,16 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                                 : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
                             }`}
                           />
+                          {selectedResumeId && (
+                            <div className="absolute right-8 top-1/2 transform -translate-y-1/2">
+                              <div className="flex items-center space-x-1 text-green-600 dark:text-green-400">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-xs font-medium">
+                                  Selected
+                                </span>
+                              </div>
+                            </div>
+                          )}
                           <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                         </div>
                       </div>
@@ -910,10 +1199,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                       <motion.button
                         key={interviewer.id}
                         onClick={() =>
-                          safeHandleInputChange(
-                            "interviewerId",
-                            interviewer.id || ""
-                          )
+                          handleInterviewerSelection(interviewer.id || "")
                         }
                         disabled={!!(uploadedFile && !isResumeNameSubmitted)}
                         className={`p-3 rounded-lg border-2 transition-all duration-200 text-left hover:scale-105 ${
@@ -968,26 +1254,45 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                 <div className="flex justify-center">
                   <motion.button
                     onClick={handleStartInterview}
-                    disabled={!formData.jobRole || !formData.interviewerId}
+                    disabled={
+                      !formData.jobRole ||
+                      !formData.interviewerId ||
+                      isStartingInterview
+                    }
                     className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 ${
-                      formData.jobRole && formData.interviewerId
+                      formData.jobRole &&
+                      formData.interviewerId &&
+                      !isStartingInterview
                         ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl"
                         : "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     }`}
                     whileHover={{
                       scale:
-                        formData.jobRole && formData.interviewerId ? 1.05 : 1,
+                        formData.jobRole &&
+                        formData.interviewerId &&
+                        !isStartingInterview
+                          ? 1.05
+                          : 1,
                     }}
                     whileTap={{
                       scale:
                         formData.jobRole && formData.interviewerId ? 0.95 : 1,
                     }}>
-                    <Play className="w-5 h-5" />
-                    <span className="text-base">
-                      {formData.scheduled
-                        ? "Schedule Interview"
-                        : "Start Interview Now"}
-                    </span>
+                    {isStartingInterview ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span className="text-base">Starting Interview...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-5 h-5" />
+                        <span className="text-base">
+                          {formData.scheduled
+                            ? "Schedule Interview"
+                            : "Start Interview Now"}
+                        </span>
+                      </>
+                    )}
                   </motion.button>
                 </div>
               </motion.div>
