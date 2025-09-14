@@ -8,7 +8,16 @@ import {
   deleteEducation,
   setSelectedEducation,
 } from "@/store/slices/profileSlice";
-import { Plus, Edit3, Trash2, GraduationCap, Save, X } from "lucide-react";
+import { ProfileApiService } from "@/lib/api/profile";
+import {
+  Plus,
+  Edit3,
+  Trash2,
+  GraduationCap,
+  Save,
+  X,
+  Loader2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function EducationSection() {
@@ -18,6 +27,11 @@ export default function EducationSection() {
   );
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     degree: "",
@@ -77,28 +91,63 @@ export default function EducationSection() {
     dispatch(setSelectedEducation(education.id));
   };
 
-  const handleSave = () => {
-    if (isAdding) {
-      const newEducation = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      dispatch(addEducation(newEducation));
-    } else if (isEditing && selectedEducationId) {
-      dispatch(updateEducation({ id: selectedEducationId, updates: formData }));
-    }
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
 
-    setIsAdding(false);
-    setIsEditing(false);
-    setFormData({
-      degree: "",
-      institution: "",
-      location: "",
-      graduationDate: "",
-      minor: "",
-      gpa: "",
-      additionalInfo: "",
-    });
+    try {
+      let updatedEducations = [...educations];
+
+      if (isAdding) {
+        const newEducation = {
+          id: Date.now().toString(),
+          ...formData,
+        };
+        updatedEducations.push(newEducation);
+        dispatch(addEducation(newEducation));
+      } else if (isEditing && selectedEducationId) {
+        const updatedEducation = { id: selectedEducationId, ...formData };
+        updatedEducations = updatedEducations.map((edu) =>
+          edu.id === selectedEducationId ? updatedEducation : edu
+        );
+        dispatch(
+          updateEducation({ id: selectedEducationId, updates: formData })
+        );
+      }
+
+      // Save to backend
+      await ProfileApiService.updateEducations(updatedEducations);
+
+      setSaveMessage({
+        type: "success",
+        text: "Education saved successfully!",
+      });
+
+      setIsAdding(false);
+      setIsEditing(false);
+      setFormData({
+        degree: "",
+        institution: "",
+        location: "",
+        graduationDate: "",
+        minor: "",
+        gpa: "",
+        additionalInfo: "",
+      });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error saving education:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to save education. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -116,11 +165,32 @@ export default function EducationSection() {
     dispatch(setSelectedEducation(null));
   };
 
-  const handleDelete = (id: string) => {
-    dispatch(deleteEducation(id));
-    if (selectedEducationId === id) {
-      dispatch(setSelectedEducation(null));
-      setIsEditing(false);
+  const handleDelete = async (id: string) => {
+    try {
+      const updatedEducations = educations.filter((edu) => edu.id !== id);
+      dispatch(deleteEducation(id));
+
+      // Save to backend
+      await ProfileApiService.updateEducations(updatedEducations);
+
+      if (selectedEducationId === id) {
+        dispatch(setSelectedEducation(null));
+        setIsEditing(false);
+      }
+
+      setSaveMessage({
+        type: "success",
+        text: "Education deleted successfully!",
+      });
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error deleting education:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to delete education. Please try again.",
+      });
     }
   };
 
@@ -160,6 +230,19 @@ export default function EducationSection() {
                   : "Select an education from the sidebar to edit or add a new one"}
               </p>
             </div>
+
+            {/* Save Message */}
+            {saveMessage && (
+              <div
+                className={`p-3 rounded-lg text-sm ${
+                  saveMessage.type === "success"
+                    ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                    : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+                }`}>
+                {saveMessage.text}
+              </div>
+            )}
+
             {(isAdding || isEditing) && (
               <div className="flex space-x-2">
                 <button
@@ -170,9 +253,14 @@ export default function EducationSection() {
                 </button>
                 <button
                   onClick={handleSave}
-                  className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs">
-                  <Save className="w-3 h-3" />
-                  <span>Save Education</span>
+                  disabled={isSaving}
+                  className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                  {isSaving ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Save className="w-3 h-3" />
+                  )}
+                  <span>{isSaving ? "Saving..." : "Save Education"}</span>
                 </button>
               </div>
             )}

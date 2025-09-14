@@ -98,7 +98,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
           {
             onSuccess: () => {
               onClose();
-              router.push("/dashboard?profile=true");
+              // Let the auth hook handle the redirect
             },
             onError: (error: any) => {
               console.error("Google sign in error:", error);
@@ -136,7 +136,8 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
       signInMutation.mutate(signInData, {
         onSuccess: () => {
           onClose();
-          router.push("/dashboard?profile=true");
+
+          // Let the auth hook handle the redirect
         },
         onError: (error: any) => {
           console.error("Sign in error:", error);
@@ -158,7 +159,7 @@ const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
       signUpMutation.mutate(signUpData, {
         onSuccess: () => {
           onClose();
-          router.push("/dashboard?profile=true");
+          // Let the auth hook handle the redirect
         },
         onError: (error: any) => {
           console.error("Sign up error:", error);

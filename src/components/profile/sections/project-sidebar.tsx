@@ -62,9 +62,9 @@ export default function ProjectSidebar() {
       </div>
 
       <div className="space-y-3">
-        {projects.map((project) => (
+        {projects.map((project, index) => (
           <motion.div
-            key={project.id}
+            key={`${project.id}_${index}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 group ${

@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
+import { userStorage } from "@/lib/localStorage";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import ResumeBasedInterview from "@/components/interview/resume-based-interview";
 import JobDescriptionInterview from "@/components/interview/job-description-interview";
@@ -33,10 +34,33 @@ import TopicBasedInterview from "@/components/interview/topic-based-interview";
 import CompanyBasedInterview from "@/components/interview/company-based-interview";
 
 const Dashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading, isAuthenticated } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { theme, setTheme } = useTheme();
+
+  // Get user data from localStorage as fallback
+  const storedUserData = userStorage.get();
+  const displayUser = user || storedUserData;
+
+  // Get display name and email with proper fallbacks
+  const displayName =
+    displayUser?.firstName || displayUser?.email?.split("@")[0] || "User";
+  const displayEmail = displayUser?.email || "No email available";
+
+  // Debug: Log user data availability
+  useEffect(() => {
+    console.log("🔍 Dashboard user data debug:", {
+      hasUser: !!user,
+      hasStoredUserData: !!storedUserData,
+      userEmail: user?.email,
+      storedUserEmail: storedUserData?.email,
+      displayUserEmail: displayUser?.email,
+      userFirstName: user?.firstName,
+      storedUserFirstName: storedUserData?.firstName,
+      displayUserFirstName: displayUser?.firstName,
+    });
+  }, [user, storedUserData, displayUser]);
   const [activeTab, setActiveTab] = useState<string>("resume");
   const [isMockInterviewOpen, setIsMockInterviewOpen] = useState(true);
 
@@ -45,7 +69,7 @@ const Dashboard = () => {
   const [isProfileSelected, setIsProfileSelected] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
-  const [isInterviewSelected, setIsInterviewSelected] = useState(false);
+  const [isInterviewSelected, setIsInterviewSelected] = useState(true); // Default to true to show resume interview
 
   const closeProfile = () => {
     setIsProfileOpen(false);
@@ -70,11 +94,25 @@ const Dashboard = () => {
     setIsClient(true);
   }, []);
 
+  // Ensure interview is selected by default for authenticated users (unless profile is requested)
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const profileParam = searchParams.get("profile");
+      if (profileParam !== "true") {
+        setIsInterviewSelected(true);
+        setActiveTab("resume");
+      }
+    }
+  }, [isAuthenticated, user, searchParams]);
+
   // Check for profile parameter and open profile automatically
   useEffect(() => {
     const profileParam = searchParams.get("profile");
     if (profileParam === "true") {
       setIsProfileOpen(true);
+      setIsProfileSelected(true); // Show profile content directly for new users
+      setIsSettingsOpen(false); // Close settings if open
+      setIsInterviewSelected(false); // Close interview if open
       // Clean up the URL parameter
       const url = new URL(window.location.href);
       url.searchParams.delete("profile");
@@ -118,15 +156,42 @@ const Dashboard = () => {
     setIsInterviewStarted(true);
   };
 
-  if (!user) {
+  // Check authentication - if not authenticated, redirect to home
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.push("/");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Show loading while authentication is being checked
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Loading Dashboard
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please wait while we prepare your dashboard...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authenticated, show login prompt (don't return null to avoid hooks order issues)
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Please log in to continue
+            Redirecting...
           </h1>
           <p className="text-gray-600 dark:text-gray-300">
-            You need to be authenticated to access the dashboard.
+            Please wait while we redirect you to the login page.
           </p>
         </div>
       </div>
@@ -447,9 +512,7 @@ const Dashboard = () => {
                             ? "text-blue-700 dark:text-blue-200"
                             : "group-hover:text-blue-600 dark:group-hover:text-blue-300"
                         }`}>
-                        {user?.firstName ||
-                          user?.email?.split("@")[0] ||
-                          "User"}
+                        {displayName}
                       </div>
                       <div
                         className={`text-xs truncate transition-all duration-200 ${
@@ -457,7 +520,7 @@ const Dashboard = () => {
                             ? "text-blue-600 dark:text-blue-300"
                             : "text-gray-600 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400"
                         }`}>
-                        {user?.email}
+                        {displayEmail}
                       </div>
                     </div>
                   )}

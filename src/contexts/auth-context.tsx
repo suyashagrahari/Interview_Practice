@@ -26,14 +26,22 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [isLoading, setIsLoading] = useState(true);
+  const [authRefreshKey, setAuthRefreshKey] = useState(0);
   const user = useCurrentUser();
   const isAuthenticated = useIsAuthenticated();
   const logoutMutation = useLogout();
 
   useEffect(() => {
-    // Set loading to false after initial render
-    setIsLoading(false);
-  }, []);
+    // Set loading to false after checking authentication status
+    const checkAuth = () => {
+      // Wait a bit to ensure cookies are loaded
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    };
+
+    checkAuth();
+  }, [authRefreshKey]);
 
   const login = async (email: string, password: string) => {
     // This will be handled by the auth modal using React Query
@@ -86,6 +94,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     );
   };
 
+  const refreshAuthState = () => {
+    setAuthRefreshKey((prev) => prev + 1);
+  };
+
   const value: AuthContextType = {
     user,
     isAuthenticated,
@@ -100,6 +112,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     resetPassword,
     verifyEmail,
     resendVerification,
+    refreshAuthState,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -5,7 +5,9 @@ import { motion } from "framer-motion";
 import { gsap } from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Play, ArrowRight, Star, Users, Target, Zap } from "lucide-react";
+import { useRouter } from "next/navigation";
 import AuthModal from "@/components/auth/auth-modal";
+import { useAuth } from "@/contexts/auth-context";
 
 // Register GSAP plugins
 if (typeof window !== "undefined") {
@@ -18,6 +20,8 @@ const Hero = () => {
   const floatingElementsRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     if (!heroRef.current) return;
@@ -82,6 +86,12 @@ const Hero = () => {
   ];
 
   const handleGetStarted = () => {
+    // If user is already authenticated, redirect to dashboard with resume mock interview
+    if (isAuthenticated && user) {
+      router.push("/dashboard");
+      return;
+    }
+    // Otherwise, show auth modal
     setIsAuthModalOpen(true);
   };
 

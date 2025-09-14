@@ -76,6 +76,7 @@ export interface AuthContextType {
   resetPassword: (data: ResetPasswordRequest) => Promise<void>;
   verifyEmail: (token: string) => Promise<void>;
   resendVerification: () => Promise<void>;
+  refreshAuthState: () => void;
 }
 
 // Form validation types

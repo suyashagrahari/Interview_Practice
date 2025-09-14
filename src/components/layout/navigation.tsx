@@ -4,8 +4,10 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Sun, Moon, Monitor } from "lucide-react";
 import { useTheme } from "next-themes";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import AuthModal from "@/components/auth/auth-modal";
+import { useAuth } from "@/contexts/auth-context";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -13,6 +15,8 @@ const Navigation = () => {
   const [scrolled, setScrolled] = useState(false);
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -43,6 +47,13 @@ const Navigation = () => {
   };
 
   const handleGetStarted = () => {
+    // If user is already authenticated, redirect to dashboard with resume mock interview
+    if (isAuthenticated && user) {
+      router.push("/dashboard");
+      setIsOpen(false); // Close mobile menu if open
+      return;
+    }
+    // Otherwise, show auth modal
     setIsAuthModalOpen(true);
     setIsOpen(false); // Close mobile menu if open
   };

@@ -7,7 +7,8 @@ import {
   updateSkill,
   deleteSkill,
 } from "@/store/slices/profileSlice";
-import { Plus, X, Edit3, Trash2, Save } from "lucide-react";
+import { ProfileApiService } from "@/lib/api/profile";
+import { Plus, X, Edit3, Trash2, Save, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function SkillsSection() {
@@ -16,15 +17,48 @@ export default function SkillsSection() {
   const [newSkill, setNewSkill] = useState("");
   const [editingSkillId, setEditingSkillId] = useState<string | null>(null);
   const [editingSkillName, setEditingSkillName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  const handleAddSkill = () => {
+  const handleAddSkill = async () => {
     if (newSkill.trim()) {
-      const skill = {
-        id: Date.now().toString(),
-        name: newSkill.trim(),
-      };
-      dispatch(addSkill(skill));
-      setNewSkill("");
+      setIsSaving(true);
+      setSaveMessage(null);
+
+      try {
+        const skill = {
+          id: `skill_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: newSkill.trim(),
+        };
+        const updatedSkills = [...skills, skill];
+        dispatch(addSkill(skill));
+
+        // Save to backend
+        await ProfileApiService.updateSkills(updatedSkills);
+
+        setSaveMessage({
+          type: "success",
+          text: "Skill added successfully!",
+        });
+
+        setNewSkill("");
+
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSaveMessage(null);
+        }, 3000);
+      } catch (error: any) {
+        console.error("Error adding skill:", error);
+        setSaveMessage({
+          type: "error",
+          text: error.message || "Failed to add skill. Please try again.",
+        });
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -39,16 +73,49 @@ export default function SkillsSection() {
     setEditingSkillName(skill.name);
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingSkillId && editingSkillName.trim()) {
-      dispatch(
-        updateSkill({
-          id: editingSkillId,
-          updates: { name: editingSkillName.trim() },
-        })
-      );
-      setEditingSkillId(null);
-      setEditingSkillName("");
+      setIsSaving(true);
+      setSaveMessage(null);
+
+      try {
+        const updatedSkills = skills.map((skill) =>
+          skill.id === editingSkillId
+            ? { ...skill, name: editingSkillName.trim() }
+            : skill
+        );
+
+        dispatch(
+          updateSkill({
+            id: editingSkillId,
+            updates: { name: editingSkillName.trim() },
+          })
+        );
+
+        // Save to backend
+        await ProfileApiService.updateSkills(updatedSkills);
+
+        setSaveMessage({
+          type: "success",
+          text: "Skill updated successfully!",
+        });
+
+        setEditingSkillId(null);
+        setEditingSkillName("");
+
+        // Clear success message after 3 seconds
+        setTimeout(() => {
+          setSaveMessage(null);
+        }, 3000);
+      } catch (error: any) {
+        console.error("Error updating skill:", error);
+        setSaveMessage({
+          type: "error",
+          text: error.message || "Failed to update skill. Please try again.",
+        });
+      } finally {
+        setIsSaving(false);
+      }
     }
   };
 
@@ -57,8 +124,28 @@ export default function SkillsSection() {
     setEditingSkillName("");
   };
 
-  const handleDeleteSkill = (id: string) => {
-    dispatch(deleteSkill(id));
+  const handleDeleteSkill = async (id: string) => {
+    try {
+      const updatedSkills = skills.filter((skill) => skill.id !== id);
+      dispatch(deleteSkill(id));
+
+      // Save to backend
+      await ProfileApiService.updateSkills(updatedSkills);
+
+      setSaveMessage({
+        type: "success",
+        text: "Skill deleted successfully!",
+      });
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error deleting skill:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to delete skill. Please try again.",
+      });
+    }
   };
 
   return (
@@ -72,6 +159,18 @@ export default function SkillsSection() {
             Add your technical and professional skills
           </p>
         </div>
+
+        {/* Save Message */}
+        {saveMessage && (
+          <div
+            className={`mb-4 p-3 rounded-lg text-sm ${
+              saveMessage.type === "success"
+                ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+            }`}>
+            {saveMessage.text}
+          </div>
+        )}
 
         {/* Add Skill Input */}
         <div className="mb-6">
@@ -88,10 +187,14 @@ export default function SkillsSection() {
             </div>
             <button
               onClick={handleAddSkill}
-              disabled={!newSkill.trim()}
+              disabled={!newSkill.trim() || isSaving}
               className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 disabled:opacity-50 disabled:cursor-not-allowed text-xs">
-              <Plus className="w-4 h-4" />
-              <span>Add</span>
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Plus className="w-4 h-4" />
+              )}
+              <span>{isSaving ? "Adding..." : "Add"}</span>
             </button>
           </div>
         </div>
@@ -101,9 +204,9 @@ export default function SkillsSection() {
           {skills.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               <AnimatePresence>
-                {skills.map((skill) => (
+                {skills.map((skill, index) => (
                   <motion.div
-                    key={skill.id}
+                    key={`${skill.id}_${index}`}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.8 }}
@@ -119,8 +222,13 @@ export default function SkillsSection() {
                         />
                         <button
                           onClick={handleSaveEdit}
-                          className="p-1 text-green-600 hover:text-green-700 transition-colors">
-                          <Save className="w-3 h-3" />
+                          disabled={isSaving}
+                          className="p-1 text-green-600 hover:text-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                          {isSaving ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Save className="w-3 h-3" />
+                          )}
                         </button>
                         <button
                           onClick={handleCancelEdit}
@@ -196,9 +304,9 @@ export default function SkillsSection() {
                         "Git",
                       ].includes(skill.name)
                     )
-                    .map((skill) => (
+                    .map((skill, index) => (
                       <span
-                        key={skill.id}
+                        key={`${skill.id}_${index}`}
                         className="inline-block px-2 py-1 text-xs font-medium text-blue-800 dark:text-blue-200 bg-blue-200 dark:bg-blue-800/30 rounded-full mr-1 mb-1">
                         {skill.name}
                       </span>
@@ -225,9 +333,9 @@ export default function SkillsSection() {
                         "Critical Thinking",
                       ].includes(skill.name)
                     )
-                    .map((skill) => (
+                    .map((skill, index) => (
                       <span
-                        key={skill.id}
+                        key={`${skill.id}_${index}`}
                         className="inline-block px-2 py-1 text-xs font-medium text-green-800 dark:text-green-200 bg-green-200 dark:bg-green-800/30 rounded-full mr-1 mb-1">
                         {skill.name}
                       </span>
@@ -267,9 +375,9 @@ export default function SkillsSection() {
                           "Critical Thinking",
                         ].includes(skill.name)
                     )
-                    .map((skill) => (
+                    .map((skill, index) => (
                       <span
-                        key={skill.id}
+                        key={`${skill.id}_${index}`}
                         className="inline-block px-2 py-1 text-xs font-medium text-purple-800 dark:text-purple-200 bg-purple-200 dark:bg-purple-800/30 rounded-full mr-1 mb-1">
                         {skill.name}
                       </span>

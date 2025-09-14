@@ -63,9 +63,9 @@ export default function ExperienceSidebar() {
       </div>
 
       <div className="space-y-3">
-        {experiences.map((experience) => (
+        {experiences.map((experience, index) => (
           <motion.div
-            key={experience.id}
+            key={`${experience.id}_${index}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 group ${

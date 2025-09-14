@@ -8,7 +8,8 @@ import {
   deleteExperience,
   setSelectedExperience,
 } from "@/store/slices/profileSlice";
-import { Plus, Edit3, Trash2, Building, Save, X } from "lucide-react";
+import { ProfileApiService } from "@/lib/api/profile";
+import { Plus, Edit3, Trash2, Building, Save, X, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ExperienceSection() {
@@ -18,6 +19,11 @@ export default function ExperienceSection() {
   );
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     role: "",
@@ -77,30 +83,63 @@ export default function ExperienceSection() {
     dispatch(setSelectedExperience(experience.id));
   };
 
-  const handleSave = () => {
-    if (isAdding) {
-      const newExperience = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      dispatch(addExperience(newExperience));
-    } else if (isEditing && selectedExperienceId) {
-      dispatch(
-        updateExperience({ id: selectedExperienceId, updates: formData })
-      );
-    }
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
 
-    setIsAdding(false);
-    setIsEditing(false);
-    setFormData({
-      role: "",
-      company: "",
-      location: "",
-      startDate: "",
-      endDate: "",
-      description: "",
-      isCurrent: false,
-    });
+    try {
+      let updatedExperiences = [...experiences];
+
+      if (isAdding) {
+        const newExperience = {
+          id: Date.now().toString(),
+          ...formData,
+        };
+        updatedExperiences.push(newExperience);
+        dispatch(addExperience(newExperience));
+      } else if (isEditing && selectedExperienceId) {
+        const updatedExperience = { id: selectedExperienceId, ...formData };
+        updatedExperiences = updatedExperiences.map((exp) =>
+          exp.id === selectedExperienceId ? updatedExperience : exp
+        );
+        dispatch(
+          updateExperience({ id: selectedExperienceId, updates: formData })
+        );
+      }
+
+      // Save to backend
+      await ProfileApiService.updateExperiences(updatedExperiences);
+
+      setSaveMessage({
+        type: "success",
+        text: "Experience saved successfully!",
+      });
+
+      setIsAdding(false);
+      setIsEditing(false);
+      setFormData({
+        role: "",
+        company: "",
+        location: "",
+        startDate: "",
+        endDate: "",
+        description: "",
+        isCurrent: false,
+      });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error saving experience:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to save experience. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -118,11 +157,32 @@ export default function ExperienceSection() {
     dispatch(setSelectedExperience(null));
   };
 
-  const handleDelete = (id: string) => {
-    dispatch(deleteExperience(id));
-    if (selectedExperienceId === id) {
-      dispatch(setSelectedExperience(null));
-      setIsEditing(false);
+  const handleDelete = async (id: string) => {
+    try {
+      const updatedExperiences = experiences.filter((exp) => exp.id !== id);
+      dispatch(deleteExperience(id));
+
+      // Save to backend
+      await ProfileApiService.updateExperiences(updatedExperiences);
+
+      if (selectedExperienceId === id) {
+        dispatch(setSelectedExperience(null));
+        setIsEditing(false);
+      }
+
+      setSaveMessage({
+        type: "success",
+        text: "Experience deleted successfully!",
+      });
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error deleting experience:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to delete experience. Please try again.",
+      });
     }
   };
 
@@ -152,6 +212,18 @@ export default function ExperienceSection() {
                 : "Select an experience to edit"}
             </p>
           </div>
+
+          {/* Save Message */}
+          {saveMessage && (
+            <div
+              className={`p-3 rounded-lg text-sm ${
+                saveMessage.type === "success"
+                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+              }`}>
+              {saveMessage.text}
+            </div>
+          )}
           {(isAdding || isEditing) && (
             <div className="flex space-x-2">
               <button
@@ -162,9 +234,14 @@ export default function ExperienceSection() {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 text-xs">
-                <Save className="w-3 h-3" />
-                <span>Save Experience</span>
+                disabled={isSaving}
+                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSaving ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Save className="w-3 h-3" />
+                )}
+                <span>{isSaving ? "Saving..." : "Save Experience"}</span>
               </button>
             </div>
           )}

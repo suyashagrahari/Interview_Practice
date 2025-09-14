@@ -8,7 +8,17 @@ import {
   deleteProject,
   setSelectedProject,
 } from "@/store/slices/profileSlice";
-import { Plus, Edit3, Trash2, Globe, Building, Save, X } from "lucide-react";
+import { ProfileApiService } from "@/lib/api/profile";
+import {
+  Plus,
+  Edit3,
+  Trash2,
+  Globe,
+  Building,
+  Save,
+  X,
+  Loader2,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ProjectSection() {
@@ -18,6 +28,11 @@ export default function ProjectSection() {
   );
   const [isAdding, setIsAdding] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -72,27 +87,60 @@ export default function ProjectSection() {
     dispatch(setSelectedProject(project.id));
   };
 
-  const handleSave = () => {
-    if (isAdding) {
-      const newProject = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      dispatch(addProject(newProject));
-    } else if (isEditing && selectedProjectId) {
-      dispatch(updateProject({ id: selectedProjectId, updates: formData }));
-    }
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
 
-    setIsAdding(false);
-    setIsEditing(false);
-    setFormData({
-      title: "",
-      organization: "",
-      startDate: "",
-      endDate: "",
-      url: "",
-      description: "",
-    });
+    try {
+      let updatedProjects = [...projects];
+
+      if (isAdding) {
+        const newProject = {
+          id: Date.now().toString(),
+          ...formData,
+        };
+        updatedProjects.push(newProject);
+        dispatch(addProject(newProject));
+      } else if (isEditing && selectedProjectId) {
+        const updatedProject = { id: selectedProjectId, ...formData };
+        updatedProjects = updatedProjects.map((proj) =>
+          proj.id === selectedProjectId ? updatedProject : proj
+        );
+        dispatch(updateProject({ id: selectedProjectId, updates: formData }));
+      }
+
+      // Save to backend
+      await ProfileApiService.updateProjects(updatedProjects);
+
+      setSaveMessage({
+        type: "success",
+        text: "Project saved successfully!",
+      });
+
+      setIsAdding(false);
+      setIsEditing(false);
+      setFormData({
+        title: "",
+        organization: "",
+        startDate: "",
+        endDate: "",
+        url: "",
+        description: "",
+      });
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error saving project:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to save project. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -109,11 +157,32 @@ export default function ProjectSection() {
     dispatch(setSelectedProject(null));
   };
 
-  const handleDelete = (id: string) => {
-    dispatch(deleteProject(id));
-    if (selectedProjectId === id) {
-      dispatch(setSelectedProject(null));
-      setIsEditing(false);
+  const handleDelete = async (id: string) => {
+    try {
+      const updatedProjects = projects.filter((proj) => proj.id !== id);
+      dispatch(deleteProject(id));
+
+      // Save to backend
+      await ProfileApiService.updateProjects(updatedProjects);
+
+      if (selectedProjectId === id) {
+        dispatch(setSelectedProject(null));
+        setIsEditing(false);
+      }
+
+      setSaveMessage({
+        type: "success",
+        text: "Project deleted successfully!",
+      });
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error deleting project:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to delete project. Please try again.",
+      });
     }
   };
 
@@ -143,6 +212,19 @@ export default function ProjectSection() {
                 : "Select a project to edit"}
             </p>
           </div>
+
+          {/* Save Message */}
+          {saveMessage && (
+            <div
+              className={`p-3 rounded-lg text-sm ${
+                saveMessage.type === "success"
+                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+              }`}>
+              {saveMessage.text}
+            </div>
+          )}
+
           {(isAdding || isEditing) && (
             <div className="flex space-x-2">
               <button
@@ -153,9 +235,14 @@ export default function ProjectSection() {
               </button>
               <button
                 onClick={handleSave}
-                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 text-xs">
-                <Save className="w-3 h-3" />
-                <span>Save to Project List</span>
+                disabled={isSaving}
+                className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                {isSaving ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Save className="w-3 h-3" />
+                )}
+                <span>{isSaving ? "Saving..." : "Save to Project List"}</span>
               </button>
             </div>
           )}

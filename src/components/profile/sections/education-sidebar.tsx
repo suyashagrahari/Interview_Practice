@@ -63,9 +63,9 @@ export default function EducationSidebar() {
       </div>
 
       <div className="space-y-3">
-        {educations.map((education) => (
+        {educations.map((education, index) => (
           <motion.div
-            key={education.id}
+            key={`${education.id}_${index}`}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             className={`p-4 rounded-xl border cursor-pointer transition-all duration-200 group ${

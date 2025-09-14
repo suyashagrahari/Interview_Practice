@@ -177,6 +177,28 @@ const profileSlice = createSlice({
     setIsEditing: (state, action: PayloadAction<boolean>) => {
       state.isEditing = action.payload;
     },
+    setExperiences: (state, action: PayloadAction<Experience[]>) => {
+      state.experiences = action.payload;
+    },
+    setProjects: (state, action: PayloadAction<Project[]>) => {
+      state.projects = action.payload;
+    },
+    setEducations: (state, action: PayloadAction<Education[]>) => {
+      state.educations = action.payload;
+    },
+    setSkills: (state, action: PayloadAction<Skill[]>) => {
+      state.skills = action.payload;
+    },
+    clearProfileData: (state) => {
+      state.experiences = [];
+      state.projects = [];
+      state.educations = [];
+      state.skills = [];
+      state.summary = '';
+      state.selectedExperienceId = null;
+      state.selectedProjectId = null;
+      state.selectedEducationId = null;
+    },
     resetProfile: () => initialState,
   },
 });
@@ -201,6 +223,11 @@ export const {
   deleteSkill,
   updateSummary,
   setIsEditing,
+  setExperiences,
+  setProjects,
+  setEducations,
+  setSkills,
+  clearProfileData,
   resetProfile,
 } = profileSlice.actions;
 

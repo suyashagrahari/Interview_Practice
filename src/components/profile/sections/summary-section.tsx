@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { updateSummary } from "@/store/slices/profileSlice";
-import { Save, Edit3, FileText } from "lucide-react";
+import { ProfileApiService } from "@/lib/api/profile";
+import { Save, Edit3, FileText, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function SummarySection() {
@@ -11,10 +12,47 @@ export default function SummarySection() {
   const { summary } = useAppSelector((state) => state.profile);
   const [isEditing, setIsEditing] = useState(false);
   const [tempSummary, setTempSummary] = useState(summary);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
-  const handleSave = () => {
-    dispatch(updateSummary(tempSummary));
-    setIsEditing(false);
+  // Update temp summary when Redux store changes (from localStorage)
+  useEffect(() => {
+    setTempSummary(summary);
+  }, [summary]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+
+    try {
+      // Update Redux store first
+      dispatch(updateSummary(tempSummary));
+
+      // Save to backend
+      await ProfileApiService.updateSummary(tempSummary);
+
+      setSaveMessage({
+        type: "success",
+        text: "Summary updated successfully!",
+      });
+      setIsEditing(false);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error saving summary:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to save summary. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -52,9 +90,14 @@ export default function SummarySection() {
                   </button>
                   <button
                     onClick={handleSave}
-                    className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs">
-                    <Save className="w-3 h-3" />
-                    <span>Save Summary</span>
+                    disabled={isSaving}
+                    className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSaving ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Save className="w-3 h-3" />
+                    )}
+                    <span>{isSaving ? "Saving..." : "Save Summary"}</span>
                   </button>
                 </>
               ) : (
@@ -67,6 +110,18 @@ export default function SummarySection() {
               )}
             </div>
           </div>
+
+          {/* Save Message */}
+          {saveMessage && (
+            <div
+              className={`mb-4 p-3 rounded-lg text-sm ${
+                saveMessage.type === "success"
+                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+              }`}>
+              {saveMessage.text}
+            </div>
+          )}
         </div>
 
         {/* Two Column Layout */}

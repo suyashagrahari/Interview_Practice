@@ -10,6 +10,7 @@ import {
   clearAuthCookies, 
   isAuthenticated 
 } from '@/lib/cookies';
+import { userStorage, initializeUserData, clearAllStorage } from '@/lib/localStorage';
 
 // Query keys for React Query
 export const authKeys = {
@@ -24,10 +25,23 @@ const getCurrentUser = (): User | null => {
   return getUserData();
 };
 
-// Save user to secure cookies
+// Save user to secure cookies and localStorage
 const saveUser = (user: User) => {
   if (typeof window !== 'undefined') {
     setUserData(user);
+    
+    // Initialize complete user data in localStorage
+    const userData = initializeUserData(user);
+    userStorage.set(userData);
+    
+    console.log('💾 User data stored in localStorage:', {
+      hasProfile: !!userData.profile,
+      profileSections: userData.profile ? Object.keys(userData.profile) : [],
+      experiences: userData.profile?.experiences?.length || 0,
+      projects: userData.profile?.projects?.length || 0,
+      educations: userData.profile?.educations?.length || 0,
+      skills: userData.profile?.skills?.length || 0,
+    });
   }
 };
 
@@ -38,10 +52,11 @@ const saveAuthTokens = (accessToken: string, refreshToken: string) => {
   }
 };
 
-// Remove auth data from secure cookies
+// Remove auth data from secure cookies and localStorage
 const clearAuthData = () => {
   if (typeof window !== 'undefined') {
     clearAuthCookies();
+    clearAllStorage();
   }
 };
 
@@ -49,7 +64,36 @@ const clearAuthData = () => {
 export const useProfile = () => {
   return useQuery({
     queryKey: authKeys.profile(),
-    queryFn: AuthApiService.getProfile,
+    queryFn: async () => {
+      // First try to get from localStorage if recent
+      const cachedUserData = userStorage.get();
+      if (cachedUserData && userStorage.isRecent()) {
+        return {
+          success: true,
+          data: {
+            id: cachedUserData.id,
+            email: cachedUserData.email,
+            firstName: cachedUserData.firstName,
+            lastName: cachedUserData.lastName,
+            avatar: cachedUserData.avatar,
+            provider: cachedUserData.provider,
+            isEmailVerified: cachedUserData.isEmailVerified,
+            createdAt: cachedUserData.createdAt,
+            updatedAt: cachedUserData.updatedAt,
+            profile: cachedUserData.profile
+          }
+        };
+      }
+      
+      // If no recent cache, fetch from API
+      const response = await AuthApiService.getProfile();
+      if (response.success && response.data) {
+        // Update localStorage with fresh data
+        const userData = initializeUserData(response.data);
+        userStorage.set(userData);
+      }
+      return response;
+    },
     enabled: !!getCurrentUser(),
     staleTime: 5 * 60 * 1000, // 5 minutes
     retry: 1,
@@ -75,7 +119,19 @@ export const useSignUp = () => {
         });
         
         toast.success('Account created successfully!');
-        router.push('/resume-interview');
+        // Force a longer delay to ensure authentication state is fully updated
+        setTimeout(() => {
+          console.log('Attempting to redirect to dashboard profile after signup...');
+          // Redirect new users to profile setup
+          router.replace('/dashboard?profile=true');
+          // Fallback to window.location if router.replace fails
+          setTimeout(() => {
+            if (window.location.pathname !== '/dashboard') {
+              console.log('Router replace failed, using window.location...');
+              window.location.href = '/dashboard?profile=true';
+            }
+          }, 300);
+        }, 500);
       }
     },
     onError: (error: any) => {
@@ -93,6 +149,15 @@ export const useSignIn = () => {
     mutationFn: (data: SignInRequest) => AuthApiService.signIn(data),
     onSuccess: (response: AuthResponse) => {
       if (response.success) {
+        console.log('✅ Sign-in successful, storing complete user data:', {
+          hasProfile: !!response.data.user.profile,
+          profileSections: response.data.user.profile ? Object.keys(response.data.user.profile) : [],
+          experiences: response.data.user.profile?.experiences?.length || 0,
+          projects: response.data.user.profile?.projects?.length || 0,
+          educations: response.data.user.profile?.educations?.length || 0,
+          skills: response.data.user.profile?.skills?.length || 0,
+        });
+        
         saveUser(response.data.user);
         saveAuthTokens(response.data.token, response.data.refreshToken);
         
@@ -103,7 +168,19 @@ export const useSignIn = () => {
         });
         
         toast.success('Welcome back!');
-        router.push('/resume-interview');
+        // Force a small delay to ensure authentication state is updated
+        setTimeout(() => {
+          console.log('Attempting to redirect to dashboard...');
+          // Try router.replace first (more forceful than push)
+          router.replace('/dashboard');
+          // Fallback to window.location if router.replace fails
+          setTimeout(() => {
+            if (window.location.pathname !== '/dashboard') {
+              console.log('Router replace failed, using window.location...');
+              window.location.href = '/dashboard';
+            }
+          }, 200);
+        }, 100);
       }
     },
     onError: (error: any) => {
@@ -121,6 +198,15 @@ export const useGoogleSignIn = () => {
     mutationFn: (data: GoogleAuthRequest) => AuthApiService.signInWithGoogle(data),
     onSuccess: (response: AuthResponse) => {
       if (response.success) {
+        console.log('✅ Google sign-in successful, storing complete user data:', {
+          hasProfile: !!response.data.user.profile,
+          profileSections: response.data.user.profile ? Object.keys(response.data.user.profile) : [],
+          experiences: response.data.user.profile?.experiences?.length || 0,
+          projects: response.data.user.profile?.projects?.length || 0,
+          educations: response.data.user.profile?.educations?.length || 0,
+          skills: response.data.user.profile?.skills?.length || 0,
+        });
+        
         saveUser(response.data.user);
         saveAuthTokens(response.data.token, response.data.refreshToken);
         
@@ -131,7 +217,19 @@ export const useGoogleSignIn = () => {
         });
         
         toast.success('Signed in with Google successfully!');
-        router.push('/resume-interview');
+        // Force a small delay to ensure authentication state is updated
+        setTimeout(() => {
+          console.log('Attempting to redirect to dashboard after Google signin...');
+          // Try router.replace first (more forceful than push)
+          router.replace('/dashboard');
+          // Fallback to window.location if router.replace fails
+          setTimeout(() => {
+            if (window.location.pathname !== '/dashboard') {
+              console.log('Router replace failed, using window.location...');
+              window.location.href = '/dashboard';
+            }
+          }, 200);
+        }, 100);
       }
     },
     onError: (error: any) => {

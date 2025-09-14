@@ -2,6 +2,7 @@
 
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { setActiveTab } from "@/store/slices/profileSlice";
+import { useProfileData, useClearDuplicates } from "@/hooks/useProfileData";
 import {
   User,
   Settings,
@@ -41,6 +42,12 @@ interface ProfileContentProps {
 export default function ProfileContent({ onClose }: ProfileContentProps) {
   const dispatch = useAppDispatch();
   const { activeTab } = useAppSelector((state) => state.profile);
+
+  // Load profile data from localStorage into Redux store
+  useProfileData();
+
+  // Clear duplicates functionality
+  const { clearDuplicates } = useClearDuplicates();
 
   const handleTabChange = (tabId: (typeof tabs)[number]["id"]) => {
     dispatch(setActiveTab(tabId));

@@ -87,6 +87,52 @@ export interface User {
   lastName?: string;
   avatar?: string;
   provider: 'email' | 'google';
+  profile?: {
+    jobTitle: string;
+    phone: string;
+    website: string;
+    linkedin: string;
+    country: string;
+    state: string;
+    city: string;
+    showStateOnResume: boolean;
+    showCountryOnResume: boolean;
+    showCityOnResume: boolean;
+    summary: string;
+    experiences: Array<{
+      id: string;
+      role: string;
+      company: string;
+      location: string;
+      startDate: string;
+      endDate: string;
+      description: string;
+      isCurrent: boolean;
+    }>;
+    projects: Array<{
+      id: string;
+      title: string;
+      organization: string;
+      startDate: string;
+      endDate: string;
+      url: string;
+      description: string;
+    }>;
+    educations: Array<{
+      id: string;
+      degree: string;
+      institution: string;
+      location: string;
+      graduationDate: string;
+      minor?: string;
+      gpa?: string;
+      additionalInfo?: string;
+    }>;
+    skills: Array<{
+      id: string;
+      name: string;
+    }>;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -183,9 +229,9 @@ export class AuthApiService {
   }
 
   // Update user profile
-  static async updateProfile(data: Partial<User>): Promise<{ success: boolean; data: User }> {
+  static async updateProfile(data: any): Promise<{ success: boolean; data: User; message: string }> {
     try {
-      const response: AxiosResponse<{ success: boolean; data: User }> = await apiClient.put('/auth/profile', data);
+      const response: AxiosResponse<{ success: boolean; data: User; message: string }> = await apiClient.put('/auth/profile', data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);

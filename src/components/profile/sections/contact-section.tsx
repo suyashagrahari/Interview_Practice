@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAppSelector, useAppDispatch } from "@/store/hooks";
 import { updateContactInfo } from "@/store/slices/profileSlice";
+import { ProfileApiService } from "@/lib/api/profile";
 import {
   User,
   Mail,
@@ -12,6 +13,7 @@ import {
   MapPin,
   Upload,
   Save,
+  Loader2,
 } from "lucide-react";
 
 const countries = [
@@ -58,6 +60,16 @@ export default function ContactSection() {
   const { contactInfo } = useAppSelector((state) => state.profile);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState(contactInfo);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
+
+  // Update form data when Redux store changes (from localStorage)
+  useEffect(() => {
+    setFormData(contactInfo);
+  }, [contactInfo]);
 
   const handleInputChange = (
     field: keyof typeof contactInfo,
@@ -66,9 +78,36 @@ export default function ContactSection() {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleSave = () => {
-    dispatch(updateContactInfo(formData));
-    setIsEditing(false);
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+
+    try {
+      // Update Redux store first
+      dispatch(updateContactInfo(formData));
+
+      // Save to backend
+      await ProfileApiService.updateContactInfo(formData);
+
+      setSaveMessage({
+        type: "success",
+        text: "Profile updated successfully!",
+      });
+      setIsEditing(false);
+
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setSaveMessage(null);
+      }, 3000);
+    } catch (error: any) {
+      console.error("Error saving profile:", error);
+      setSaveMessage({
+        type: "error",
+        text: error.message || "Failed to save profile. Please try again.",
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -101,9 +140,14 @@ export default function ContactSection() {
                   </button>
                   <button
                     onClick={handleSave}
-                    className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs">
-                    <Save className="w-3 h-3" />
-                    <span>Save Changes</span>
+                    disabled={isSaving}
+                    className="px-4 py-1.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg hover:from-blue-600 hover:to-purple-700 transition-all duration-200 flex items-center space-x-1.5 shadow-lg hover:shadow-xl text-xs disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isSaving ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Save className="w-3 h-3" />
+                    )}
+                    <span>{isSaving ? "Saving..." : "Save Changes"}</span>
                   </button>
                 </>
               ) : (
@@ -115,6 +159,18 @@ export default function ContactSection() {
               )}
             </div>
           </div>
+
+          {/* Save Message */}
+          {saveMessage && (
+            <div
+              className={`mb-4 p-3 rounded-lg text-sm ${
+                saveMessage.type === "success"
+                  ? "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border border-green-200 dark:border-green-800"
+                  : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-800"
+              }`}>
+              {saveMessage.text}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
