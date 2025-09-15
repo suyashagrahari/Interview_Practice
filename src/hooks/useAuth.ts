@@ -118,6 +118,9 @@ export const useSignUp = () => {
           data: response.data.user,
         });
         
+        // Invalidate auth queries to refresh the authentication state
+        queryClient.invalidateQueries({ queryKey: authKeys.all });
+        
         toast.success('Account created successfully!');
         // Force a longer delay to ensure authentication state is fully updated
         setTimeout(() => {
@@ -167,6 +170,9 @@ export const useSignIn = () => {
           data: response.data.user,
         });
         
+        // Invalidate auth queries to refresh the authentication state
+        queryClient.invalidateQueries({ queryKey: authKeys.all });
+        
         toast.success('Welcome back!');
         // Force a small delay to ensure authentication state is updated
         setTimeout(() => {
@@ -215,6 +221,9 @@ export const useGoogleSignIn = () => {
           success: true,
           data: response.data.user,
         });
+        
+        // Invalidate auth queries to refresh the authentication state
+        queryClient.invalidateQueries({ queryKey: authKeys.all });
         
         toast.success('Signed in with Google successfully!');
         // Force a small delay to ensure authentication state is updated

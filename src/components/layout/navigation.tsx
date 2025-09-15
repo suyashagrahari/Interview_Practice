@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import AuthModal from "@/components/auth/auth-modal";
 import { useAuth } from "@/contexts/auth-context";
+import { checkUserAuthentication } from "@/lib/auth-utils";
 
 const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,12 +48,29 @@ const Navigation = () => {
   };
 
   const handleGetStarted = () => {
-    // If user is already authenticated, redirect to dashboard with resume mock interview
-    if (isAuthenticated && user) {
-      router.push("/dashboard");
+    // Check authentication from multiple sources for reliability
+    const authResult = checkUserAuthentication(isAuthenticated, user);
+
+    console.log("🔍 Navigation handleGetStarted - Auth state:", {
+      isAuthenticated: authResult.isAuthenticated,
+      user: authResult.user,
+      source: authResult.source,
+      userEmail: authResult.user?.email,
+      userFirstName: authResult.user?.firstName,
+      debugInfo: authResult.debugInfo,
+    });
+
+    // If user is already authenticated (from any source), redirect to dashboard with resume mock interview
+    if (authResult.isAuthenticated) {
+      console.log(
+        `✅ User is authenticated via ${authResult.source}, redirecting to resume interview`
+      );
+      router.push("/dashboard?interview=resume");
       setIsOpen(false); // Close mobile menu if open
       return;
     }
+
+    console.log("❌ User not authenticated, showing auth modal");
     // Otherwise, show auth modal
     setIsAuthModalOpen(true);
     setIsOpen(false); // Close mobile menu if open

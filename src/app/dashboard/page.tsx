@@ -98,9 +98,21 @@ const Dashboard = () => {
   useEffect(() => {
     if (isAuthenticated && user) {
       const profileParam = searchParams.get("profile");
+      const interviewParam = searchParams.get("interview");
+
       if (profileParam !== "true") {
         setIsInterviewSelected(true);
-        setActiveTab("resume");
+        // Set the active tab based on the interview parameter or default to resume
+        if (
+          interviewParam &&
+          ["resume", "job-description", "topic", "company"].includes(
+            interviewParam
+          )
+        ) {
+          setActiveTab(interviewParam);
+        } else {
+          setActiveTab("resume");
+        }
       }
     }
   }, [isAuthenticated, user, searchParams]);

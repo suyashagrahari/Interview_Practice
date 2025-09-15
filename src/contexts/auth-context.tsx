@@ -31,6 +31,17 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const isAuthenticated = useIsAuthenticated();
   const logoutMutation = useLogout();
 
+  // Debug authentication state
+  useEffect(() => {
+    console.log("🔍 AuthProvider - Auth state changed:", {
+      isAuthenticated,
+      hasUser: !!user,
+      userEmail: user?.email,
+      userFirstName: user?.firstName,
+      authRefreshKey,
+    });
+  }, [isAuthenticated, user, authRefreshKey]);
+
   useEffect(() => {
     // Set loading to false after checking authentication status
     const checkAuth = () => {
