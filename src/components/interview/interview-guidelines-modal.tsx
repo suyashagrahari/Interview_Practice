@@ -26,13 +26,11 @@ import {
 
 interface InterviewGuidelinesModalProps {
   isOpen: boolean;
-  onClose: () => void;
   onStartInterview: () => void;
 }
 
 const InterviewGuidelinesModal = ({
   isOpen,
-  onClose,
   onStartInterview,
 }: InterviewGuidelinesModalProps) => {
   const [currentStep, setCurrentStep] = useState(1);
@@ -69,6 +67,18 @@ const InterviewGuidelinesModal = ({
 
   const canStartInterview = () => {
     return checkedSteps.size === totalSteps && agreedToTerms;
+  };
+
+  // Prevent modal from closing
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   };
 
   const steps = [
@@ -370,12 +380,15 @@ const InterviewGuidelinesModal = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          onClick={handleBackdropClick}
+          onKeyDown={handleKeyDown}>
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-6 text-white">
               <div className="flex items-center justify-between">
@@ -391,11 +404,6 @@ const InterviewGuidelinesModal = ({
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={onClose}
-                  className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-lg flex items-center justify-center transition-colors duration-200">
-                  <X className="w-5 h-5" />
-                </button>
               </div>
 
               {/* Progress Bar */}
@@ -493,4 +501,3 @@ const InterviewGuidelinesModal = ({
 };
 
 export default InterviewGuidelinesModal;
-

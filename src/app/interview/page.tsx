@@ -33,6 +33,14 @@ import {
   Palette,
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
+import StreamingText from "@/components/ui/streaming-text";
+import { useProctoring } from "@/hooks/useProctoring";
+import {
+  interviewRealtimeApi,
+  InterviewQuestion,
+  AnswerAnalysis,
+  ProctoringData,
+} from "@/lib/api/interview-realtime";
 import Image from "next/image";
 
 const InterviewPage = () => {
@@ -46,9 +54,13 @@ const InterviewPage = () => {
   const [isMicOn, setIsMicOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState(1);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(10);
-  const [timeRemaining, setTimeRemaining] = useState(30 * 60); // 30 minutes in seconds
+  const [timeRemaining, setTimeRemaining] = useState(45 * 60); // 45 minutes in seconds
+  const [interviewStartTime, setInterviewStartTime] = useState<Date | null>(
+    null
+  );
+  const [isTimerActive, setIsTimerActive] = useState(false);
   const [interviewType, setInterviewType] = useState("");
   const [liveTranscription, setLiveTranscription] = useState("");
   const [isAISpeaking, setIsAISpeaking] = useState(false);
@@ -61,39 +73,44 @@ const InterviewPage = () => {
     answer:
       "A closure is a function that has access to variables in its outer (enclosing) scope even after the outer function has returned. Closures are created every time a function is created, at function creation time. They allow for data privacy and the creation of function factories.",
   });
+
+  // Real-time interview state
+  const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [currentQuestion, setCurrentQuestion] =
+    useState<InterviewQuestion | null>(null);
+  const [questionNumber, setQuestionNumber] = useState(1);
+  const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
+  const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+  const [answerAnalysis, setAnswerAnalysis] = useState<AnswerAnalysis | null>(
+    null
+  );
+  const [userAnswer, setUserAnswer] = useState("");
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+
+  // Proctoring
+  const {
+    proctoringData,
+    startProctoring,
+    stopProctoring,
+    resetProctoring,
+    isProctoring,
+  } = useProctoring();
   // Ref for question section scrolling
   const questionSectionRef = useRef<HTMLDivElement>(null);
+  const chatMessagesRef = useRef<HTMLDivElement>(null);
 
-  const [chatMessages, setChatMessages] = useState([
-    {
-      id: 1,
-      type: "ai",
-      message:
-        "Hello! I'm your AI interviewer. Let's begin with your first question. Can you tell me about a challenging project you've worked on?",
-      timestamp: "10:32 AM",
-    },
-    {
-      id: 2,
-      type: "user",
-      message:
-        "Certainly. One of the most challenging projects was developing a real-time data visualization dashboard. The main difficulty was handling large datasets and ensuring the UI remained responsive.",
-      timestamp: "10:33 AM",
-    },
-    {
-      id: 3,
-      type: "user",
-      message:
-        "We used techniques like data pagination, lazy loading, and optimized rendering with virtual lists.",
-      timestamp: "10:34 AM",
-    },
-    {
-      id: 4,
-      type: "ai",
-      message:
-        "That's interesting. What was the most significant outcome of that project?",
-      timestamp: "10:35 AM",
-    },
-  ]);
+  const [chatMessages, setChatMessages] = useState<
+    Array<{
+      id: string;
+      type: "ai" | "user";
+      message: string;
+      timestamp: string;
+      questionId?: string;
+      answer?: string;
+      analysis?: AnswerAnalysis;
+    }>
+  >([]);
 
   // Get interview type from URL params
   useEffect(() => {
@@ -102,15 +119,40 @@ const InterviewPage = () => {
     setInterviewType(type);
   }, [searchParams]);
 
-  // Timer countdown
+  // Timer countdown with automatic interview ending
   useEffect(() => {
     if (isInterviewStarted && timeRemaining > 0) {
       const timer = setInterval(() => {
-        setTimeRemaining((prev) => prev - 1);
+        setTimeRemaining((prev) => {
+          if (prev <= 1) {
+            // Time's up! End interview automatically
+            handleAutoEndInterview();
+            return 0;
+          }
+          return prev - 1;
+        });
       }, 1000);
       return () => clearInterval(timer);
     }
   }, [isInterviewStarted, timeRemaining]);
+
+  // Auto-end interview function
+  const handleAutoEndInterview = async () => {
+    if (interviewId) {
+      try {
+        await interviewRealtimeApi.endInterview(interviewId);
+        // Redirect to dashboard with completion status
+        router.push("/dashboard?interviewCompleted=true");
+      } catch (error) {
+        console.error("Error auto-ending interview:", error);
+        // Still redirect even if there's an error
+        router.push("/dashboard?interviewCompleted=true");
+      }
+    } else {
+      // Redirect to dashboard even if no interview ID
+      router.push("/dashboard?interviewCompleted=true");
+    }
+  };
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -120,9 +162,237 @@ const InterviewPage = () => {
       .padStart(2, "0")}`;
   };
 
-  const handleGuidelinesComplete = () => {
+  const getCurrentTimestamp = () => {
+    return new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const addMessageToChat = (
+    type: "ai" | "user",
+    message: string,
+    questionId?: string,
+    answer?: string,
+    analysis?: AnswerAnalysis
+  ) => {
+    const newMessage = {
+      id: `${Date.now()}-${Math.random()}`,
+      type,
+      message,
+      timestamp: getCurrentTimestamp(),
+      questionId,
+      answer,
+      analysis,
+    };
+    setChatMessages((prev) => [...prev, newMessage]);
+
+    // Scroll to bottom of chat
+    setTimeout(() => {
+      if (chatMessagesRef.current) {
+        chatMessagesRef.current.scrollTop =
+          chatMessagesRef.current.scrollHeight;
+      }
+    }, 100);
+  };
+
+  const handleChatMessageClick = (message: any) => {
+    if (message.type === "ai" && message.questionId) {
+      // Show question in left panel
+      setCurrentQuestion({
+        questionId: message.questionId,
+        question: message.message,
+        category: "Interview Question",
+        difficulty: "medium",
+        expectedAnswer: "User should provide a relevant answer",
+      });
+    } else if (message.type === "user" && message.answer) {
+      // Show user's answer in left panel
+      setCurrentQuestionData({
+        question: "Your Answer",
+        answer: message.answer,
+      });
+    }
+  };
+
+  const handleGuidelinesComplete = async () => {
     setIsGuidelinesModalOpen(false);
     setIsInterviewStarted(true);
+
+    // Start the 45-minute timer
+    setInterviewStartTime(new Date());
+    setTimeRemaining(45 * 60); // Reset to 45 minutes
+
+    // Start the real interview process
+    await startRealInterview();
+  };
+
+  const startRealInterview = async () => {
+    try {
+      // Get interview ID from URL params or create a new interview
+      const interviewIdParam = searchParams.get("interviewId");
+
+      if (interviewIdParam) {
+        setInterviewId(interviewIdParam);
+        // Generate first question
+        await generateFirstQuestion(interviewIdParam);
+      } else {
+        // Create new interview first (this would need to be implemented)
+        console.log("Creating new interview...");
+      }
+    } catch (error) {
+      console.error("Error starting interview:", error);
+    }
+  };
+
+  const generateFirstQuestion = async (interviewId: string) => {
+    try {
+      setIsGeneratingQuestion(true);
+
+      const response = await interviewRealtimeApi.generateFirstQuestion(
+        interviewId,
+        {
+          interviewerBio: "AI Interviewer", // This will be overridden by backend with actual interviewer data
+        }
+      );
+
+      if (response.success) {
+        setCurrentQuestion(response.data.question);
+        setQuestionNumber(response.data.questionNumber);
+
+        // Start streaming the question to both chat and left panel
+        await streamQuestionToBoth(
+          response.data.question.question,
+          response.data.question.questionId
+        );
+
+        // Start proctoring
+        startProctoring();
+      }
+    } catch (error) {
+      console.error("Error generating first question:", error);
+    } finally {
+      setIsGeneratingQuestion(false);
+    }
+  };
+
+  const streamQuestion = async (questionText: string) => {
+    setIsStreaming(true);
+    setStreamingText("");
+
+    // Simulate streaming by adding characters one by one
+    for (let i = 0; i <= questionText.length; i++) {
+      setStreamingText(questionText.slice(0, i));
+      await new Promise((resolve) => setTimeout(resolve, 30)); // 30ms delay between characters
+    }
+
+    setIsStreaming(false);
+  };
+
+  const streamQuestionToBoth = async (
+    questionText: string,
+    questionId: string
+  ) => {
+    setIsStreaming(true);
+    setStreamingText("");
+
+    // Create a temporary message for streaming in chat
+    const tempMessageId = `temp-${Date.now()}`;
+    const tempMessage = {
+      id: tempMessageId,
+      type: "ai" as const,
+      message: "",
+      timestamp: getCurrentTimestamp(),
+      questionId,
+    };
+
+    // Add temporary message to chat
+    setChatMessages((prev) => [...prev, tempMessage]);
+
+    // Simulate streaming by adding characters one by one
+    for (let i = 0; i <= questionText.length; i++) {
+      const currentText = questionText.slice(0, i);
+      setStreamingText(currentText);
+
+      // Update the temporary message in chat
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === tempMessageId ? { ...msg, message: currentText } : msg
+        )
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 30)); // 30ms delay between characters
+    }
+
+    setIsStreaming(false);
+  };
+
+  const handleSubmitAnswer = async () => {
+    if (!currentQuestion || !interviewId || !userAnswer.trim()) return;
+
+    try {
+      setIsSubmittingAnswer(true);
+      stopProctoring();
+
+      const response = await interviewRealtimeApi.submitAnswer(
+        interviewId,
+        currentQuestion.questionId,
+        {
+          answer: userAnswer,
+          timeSpent: proctoringData.timeSpent,
+          startTime: proctoringData.startTime || new Date(),
+          endTime: new Date(),
+          tabSwitches: proctoringData.tabSwitches,
+          copyPasteCount: proctoringData.copyPasteCount,
+          faceDetection: proctoringData.faceDetection,
+          mobileDetection: proctoringData.mobileDetection,
+          laptopDetection: proctoringData.laptopDetection,
+          zoomIn: proctoringData.zoomIn,
+          zoomOut: proctoringData.zoomOut,
+          questionNumber,
+        }
+      );
+
+      if (response.success) {
+        // Add user answer to chat
+        addMessageToChat(
+          "user",
+          userAnswer,
+          currentQuestion.questionId,
+          userAnswer
+        );
+
+        // Store analysis but don't show in chat
+        if (response.data.analysis) {
+          setAnswerAnalysis(response.data.analysis);
+        }
+
+        // Move to next question if available
+        if (response.data.nextQuestion) {
+          setCurrentQuestion(response.data.nextQuestion);
+          setQuestionNumber(response.data.questionNumber);
+          setUserAnswer("");
+          setAnswerAnalysis(null);
+
+          // Stream the next question to both chat and left panel
+          await streamQuestionToBoth(
+            response.data.nextQuestion.question,
+            response.data.nextQuestion.questionId
+          );
+
+          // Reset proctoring for next question
+          resetProctoring();
+          startProctoring();
+        } else {
+          // Interview completed
+          setIsInterviewStarted(false);
+        }
+      }
+    } catch (error) {
+      console.error("Error submitting answer:", error);
+    } finally {
+      setIsSubmittingAnswer(false);
+    }
   };
 
   const handleToggleVideo = () => {
@@ -147,8 +417,21 @@ const InterviewPage = () => {
     setIsAISpeaking(true); // AI starts speaking when user stops
   };
 
-  const handleEndInterview = () => {
-    setShowExitConfirm(true);
+  const handleEndInterview = async () => {
+    if (interviewId) {
+      try {
+        await interviewRealtimeApi.endInterview(interviewId);
+        // Redirect to dashboard with completion status
+        router.push("/dashboard?interviewCompleted=true");
+      } catch (error) {
+        console.error("Error ending interview:", error);
+        // Still redirect even if there's an error
+        router.push("/dashboard?interviewCompleted=true");
+      }
+    } else {
+      // Redirect to dashboard even if no interview ID
+      router.push("/dashboard?interviewCompleted=true");
+    }
   };
 
   const confirmExitInterview = () => {
@@ -212,7 +495,6 @@ const InterviewPage = () => {
       {/* Guidelines Modal */}
       <InterviewGuidelinesModal
         isOpen={isGuidelinesModalOpen}
-        onClose={() => setIsGuidelinesModalOpen(false)}
         onStartInterview={handleGuidelinesComplete}
       />
 
@@ -375,7 +657,7 @@ const InterviewPage = () => {
                       className={`text-lg font-semibold ${
                         isDarkMode ? "text-white" : "text-slate-900"
                       }`}>
-                      Question {currentQuestion}
+                      Question {questionNumber}
                     </h3>
                     <div
                       className={`flex items-center space-x-2 text-sm ${
@@ -385,12 +667,40 @@ const InterviewPage = () => {
                       <span>2 min</span>
                     </div>
                   </div>
-                  <p
+                  <div
                     className={`text-base leading-relaxed mb-4 ${
                       isDarkMode ? "text-slate-200" : "text-slate-700"
                     }`}>
-                    {currentQuestionData.question}
-                  </p>
+                    {isStreaming ? (
+                      <StreamingText
+                        text={streamingText}
+                        speed={30}
+                        className="min-h-[2rem]"
+                      />
+                    ) : currentQuestion ? (
+                      currentQuestion.question
+                    ) : (
+                      currentQuestionData.question
+                    )}
+                  </div>
+
+                  {/* Show current answer if available */}
+                  {currentQuestionData.answer && (
+                    <div className="mt-4 p-4 bg-slate-50 dark:bg-slate-700 rounded-lg">
+                      <h4
+                        className={`text-sm font-medium mb-2 ${
+                          isDarkMode ? "text-slate-300" : "text-slate-600"
+                        }`}>
+                        Your Answer:
+                      </h4>
+                      <div
+                        className={`text-sm ${
+                          isDarkMode ? "text-slate-200" : "text-slate-700"
+                        }`}>
+                        {currentQuestionData.answer}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Hint Section */}
                   {showHint && (
@@ -575,6 +885,7 @@ const InterviewPage = () => {
 
           {/* Chat Messages */}
           <div
+            ref={chatMessagesRef}
             className={`flex-1 p-6 space-y-4 overflow-y-auto min-h-0 ${
               isDarkMode ? "bg-slate-800" : "bg-slate-50"
             }`}>
@@ -585,20 +896,21 @@ const InterviewPage = () => {
                   message.type === "user" ? "justify-end" : "justify-start"
                 }`}>
                 <div
-                  className={`max-w-[85%] rounded-lg p-4 ${
+                  className={`max-w-[85%] rounded-lg p-4 transition-all duration-200 hover:shadow-md cursor-pointer ${
                     message.type === "user"
                       ? isDarkMode
-                        ? "bg-slate-700 text-white border border-slate-600"
-                        : "bg-slate-700 text-white border border-slate-600"
+                        ? "bg-blue-600 text-white border border-blue-500 hover:bg-blue-500 shadow-lg"
+                        : "bg-blue-600 text-white border border-blue-500 hover:bg-blue-500 shadow-lg"
                       : isDarkMode
-                      ? "bg-slate-700 text-slate-200 border border-slate-600"
-                      : "bg-white text-slate-700 border border-slate-300"
-                  }`}>
+                      ? "bg-slate-700 text-slate-200 border border-slate-600 hover:bg-slate-600"
+                      : "bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 shadow-sm"
+                  }`}
+                  onClick={() => handleChatMessageClick(message)}>
                   <div className="flex items-start space-x-3">
                     <div
                       className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         message.type === "user"
-                          ? "bg-slate-600"
+                          ? "bg-blue-500"
                           : isDarkMode
                           ? "bg-slate-600"
                           : "bg-slate-200"
@@ -617,20 +929,52 @@ const InterviewPage = () => {
                       <div className="flex items-center space-x-2 mb-2">
                         <span
                           className={`text-sm font-medium ${
-                            isDarkMode ? "text-slate-300" : "text-slate-600"
+                            message.type === "user"
+                              ? "text-white"
+                              : isDarkMode
+                              ? "text-slate-300"
+                              : "text-slate-600"
                           }`}>
-                          {message.type === "ai" ? "AI Assistant" : "You"}
+                          {message.type === "ai" ? "AI Interviewer" : "You"}
                         </span>
                         <span
                           className={`text-xs ${
-                            isDarkMode ? "text-slate-500" : "text-slate-500"
+                            message.type === "user"
+                              ? "text-blue-100"
+                              : isDarkMode
+                              ? "text-slate-500"
+                              : "text-slate-500"
                           }`}>
                           {message.timestamp}
                         </span>
+                        {message.questionId && (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full ${
+                              message.type === "user"
+                                ? "bg-blue-500 text-white"
+                                : "bg-blue-100 text-blue-800"
+                            }`}>
+                            Question
+                          </span>
+                        )}
+                        {message.answer && (
+                          <span
+                            className={`text-xs px-2 py-1 rounded-full ${
+                              message.type === "user"
+                                ? "bg-green-500 text-white"
+                                : "bg-green-100 text-green-800"
+                            }`}>
+                            Answer
+                          </span>
+                        )}
                       </div>
                       <div
                         className={`text-sm leading-relaxed ${
-                          isDarkMode ? "text-slate-200" : "text-slate-700"
+                          message.type === "user"
+                            ? "text-white"
+                            : isDarkMode
+                            ? "text-slate-200"
+                            : "text-slate-700"
                         }`}>
                         {message.message}
                       </div>
@@ -648,27 +992,88 @@ const InterviewPage = () => {
                 ? "bg-slate-800 border-slate-700"
                 : "bg-white border-slate-200"
             }`}>
-            <div className="flex items-end space-x-3">
+            <div className="flex items-end space-x-4">
               <div className="flex-1">
                 <textarea
-                  placeholder="Type your answer here..."
+                  placeholder={
+                    isGeneratingQuestion
+                      ? "Generating question..."
+                      : "Type your answer here..."
+                  }
                   rows={3}
-                  className={`w-full px-4 py-3 text-sm border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 ${
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                  disabled={
+                    isGeneratingQuestion ||
+                    isSubmittingAnswer ||
+                    !currentQuestion
+                  }
+                  className={`w-full px-4 py-3 text-sm border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
                     isDarkMode
                       ? "bg-slate-700 border-slate-600 text-white placeholder-slate-400"
                       : "bg-white border-slate-300 text-slate-900 placeholder-slate-500"
+                  } ${
+                    isGeneratingQuestion ||
+                    isSubmittingAnswer ||
+                    !currentQuestion
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
                   }`}
                 />
               </div>
               <button
-                className={`px-4 py-3 rounded-lg transition-all duration-200 flex items-center justify-center ${
+                onClick={handleSubmitAnswer}
+                disabled={
+                  isGeneratingQuestion ||
+                  isSubmittingAnswer ||
+                  !currentQuestion ||
+                  !userAnswer.trim()
+                }
+                className={`px-6 py-3 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2 font-medium ${
                   isDarkMode
-                    ? "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                    : "bg-slate-700 text-white hover:bg-slate-800"
+                    ? "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800"
+                    : "bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800"
+                } ${
+                  isGeneratingQuestion ||
+                  isSubmittingAnswer ||
+                  !currentQuestion ||
+                  !userAnswer.trim()
+                    ? "opacity-50 cursor-not-allowed"
+                    : "shadow-lg hover:shadow-xl"
                 }`}>
-                <Send className="w-5 h-5" />
+                {isSubmittingAnswer ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="text-sm">Sending...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4" />
+                    <span className="text-sm">Send</span>
+                  </>
+                )}
               </button>
             </div>
+
+            {/* Proctoring Status */}
+            {isProctoring && (
+              <div className="mt-3 flex items-center space-x-4 text-xs text-slate-500">
+                <span>
+                  Time: {Math.floor(proctoringData.timeSpent / 60)}:
+                  {(proctoringData.timeSpent % 60).toString().padStart(2, "0")}
+                </span>
+                {proctoringData.tabSwitches > 0 && (
+                  <span className="text-red-500">
+                    Tab Switches: {proctoringData.tabSwitches}
+                  </span>
+                )}
+                {proctoringData.copyPasteCount > 0 && (
+                  <span className="text-red-500">
+                    Copy/Paste: {proctoringData.copyPasteCount}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -754,7 +1159,7 @@ const InterviewPage = () => {
                       className={`text-sm ${
                         isDarkMode ? "text-slate-400" : "text-slate-600"
                       }`}>
-                      Question {currentQuestion}
+                      Question {questionNumber}
                     </span>
                   </div>
                 </div>

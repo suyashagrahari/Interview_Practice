@@ -81,3 +81,5 @@ export const isUserAuthenticated = (
 ): boolean => {
   return checkUserAuthentication(contextAuth, contextUser).isAuthenticated;
 };
+
+

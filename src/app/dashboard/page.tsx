@@ -94,6 +94,16 @@ const Dashboard = () => {
     setIsClient(true);
   }, []);
 
+  // Check for interview completion status
+  useEffect(() => {
+    const interviewCompleted = searchParams.get("interviewCompleted");
+    if (interviewCompleted === "true") {
+      // Show success message or notification
+      console.log("Interview completed successfully!");
+      // You can add a toast notification here if you have one
+    }
+  }, [searchParams]);
+
   // Ensure interview is selected by default for authenticated users (unless profile is requested)
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -159,8 +169,35 @@ const Dashboard = () => {
     },
   ];
 
-  const handleStartInterview = () => {
-    setIsGuidelinesModalOpen(true);
+  const handleStartInterview = async () => {
+    try {
+      // Create interview first
+      const interviewData = {
+        resumeId: "your-resume-id", // This should come from the selected resume
+        interviewType: "technical",
+        level: "3-4",
+        difficultyLevel: "intermediate",
+        jobRole: "Frontend Developer",
+        interviewerId: "ai-interviewer-1",
+        interviewer: {
+          name: "AI Interviewer",
+          experience: "5+ years in technical interviews",
+          bio: "I'm an AI interviewer with extensive experience in conducting technical interviews. I'll help you practice and improve your interview skills.",
+        },
+      };
+
+      // This would call the API to create an interview
+      // const response = await interviewRealtimeApi.startInterview(interviewData);
+      // const interviewId = response.data.interviewId;
+
+      // For now, use a mock interview ID
+      const mockInterviewId = "mock-interview-id";
+
+      // Navigate to interview page with interview ID
+      router.push(`/interview?interviewId=${mockInterviewId}`);
+    } catch (error) {
+      console.error("Error starting interview:", error);
+    }
   };
 
   const handleGuidelinesComplete = () => {
@@ -745,7 +782,6 @@ const Dashboard = () => {
       {/* Interview Guidelines Modal */}
       <InterviewGuidelinesModal
         isOpen={isGuidelinesModalOpen}
-        onClose={() => setIsGuidelinesModalOpen(false)}
         onStartInterview={handleGuidelinesComplete}
       />
     </div>
