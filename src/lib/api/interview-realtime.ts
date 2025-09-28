@@ -47,6 +47,35 @@ export interface SubmitAnswerRequest {
   questionNumber: number;
 }
 
+export interface WarningStatus {
+  warningCount: number;
+  isTerminated: boolean;
+  canContinue: boolean;
+  lastWarningAt: string | null;
+}
+
+export interface SentimentAnalysis {
+  sentiment: 'positive' | 'negative' | 'neutral';
+  confidence: number;
+  abusiveLanguage: boolean;
+  inappropriateContent: boolean;
+  professionalAppropriate: boolean;
+  analysisDetails: string;
+  detectedIssues: string[];
+  severityScore: number;
+  timestamp: string;
+}
+
+export interface WarningData {
+  issued: boolean;
+  isTerminated?: boolean;
+  warningCount?: number;
+  reason?: string;
+  isProfessional?: boolean;
+  containsInappropriateContent?: boolean;
+  sentiment?: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+}
+
 export interface SubmitAnswerResponse {
   success: boolean;
   message: string;
@@ -56,6 +85,23 @@ export interface SubmitAnswerResponse {
     analysis: AnswerAnalysis | null;
     nextQuestion: InterviewQuestion | null;
     questionNumber: number;
+    warningStatus: WarningStatus;
+    warning: WarningData;
+    sentiment: 'POSITIVE' | 'NEGATIVE' | 'NEUTRAL';
+    hasWarning: boolean;
+    // New fields from the updated response structure
+    warningCount: number;
+    warningIssued: boolean;
+    interviewTerminated: boolean;
+    canContinue: boolean;
+    lastWarningAt: string | null;
+    questionSentiment: string;
+    debug: {
+      analysisSuccess: boolean;
+      sentimentSuccess: boolean;
+      sentimentValue: string;
+      questionUpdated: boolean;
+    };
   };
 }
 

@@ -27,7 +27,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/contexts/theme-context";
 import Breadcrumbs from "./breadcrumbs";
 import RelatedTopics from "./related-topics";
 import SocialSharing from "./social-sharing";
@@ -65,11 +65,10 @@ interface InterviewTopicBlogProps {
 
 const InterviewTopicBlog = ({ topic }: InterviewTopicBlogProps) => {
   const router = useRouter();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, mounted } = useTheme();
   const [selectedQuestion, setSelectedQuestion] = useState<Question | null>(
     null
   );
-  const [mounted, setMounted] = useState(false);
 
   // Sample topics data
   const topics: Topic[] = [
@@ -164,7 +163,6 @@ function hoistedFunction() {
   ];
 
   useEffect(() => {
-    setMounted(true);
     if (questions.length > 0) {
       setSelectedQuestion(questions[0]);
     }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Sun, Moon, Monitor } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/contexts/theme-context";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import AuthModal from "@/components/auth/auth-modal";
@@ -14,13 +14,11 @@ const Navigation = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme, mounted } = useTheme();
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
 
   useEffect(() => {
-    setMounted(true);
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
     };
@@ -38,13 +36,7 @@ const Navigation = () => {
   const toggleMenu = () => setIsOpen(!isOpen);
 
   const toggleTheme = () => {
-    if (theme === "dark") {
-      setTheme("light");
-    } else if (theme === "light") {
-      setTheme("dark");
-    } else {
-      setTheme("dark");
-    }
+    setTheme(theme === "dark" ? "light" : "dark");
   };
 
   const handleGetStarted = () => {

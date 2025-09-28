@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/contexts/theme-context";
 import { userStorage } from "@/lib/localStorage";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import ResumeBasedInterview from "@/components/interview/resume-based-interview";

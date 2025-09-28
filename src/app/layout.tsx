@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Poppins } from "next/font/google";
 import "./globals.css";
-import { ThemeProvider } from "@/components/providers/theme-provider";
+import { ThemeProvider } from "@/contexts/theme-context";
 import { QueryProvider } from "@/providers/query-provider";
 import { ReduxProvider } from "@/providers/redux-provider";
 import { Toaster } from "sonner";
@@ -96,11 +96,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${poppins.variable} font-sans antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange>
+        <ThemeProvider>
           <ReduxProvider>
             <QueryProvider>
               <AuthProvider>
