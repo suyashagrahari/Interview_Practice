@@ -37,6 +37,8 @@ import {
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import StreamingText from "@/components/ui/streaming-text";
+import SpeechRecognizer from "@/components/speech/SpeechRecognizer";
+import { SpeechPolyfillManager } from "@/utils/speechPolyfills";
 import { useProctoring } from "@/hooks/useProctoring";
 import {
   interviewRealtimeApi,
@@ -58,9 +60,30 @@ const InterviewPage = () => {
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isVideoOn, setIsVideoOn] = useState(true);
+  const [isVideoOn, setIsVideoOn] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraPermission, setCameraPermission] = useState<
+    "pending" | "granted" | "denied"
+  >("pending");
+  const [showCameraRequest, setShowCameraRequest] = useState(false);
+  const [cameraTested, setCameraTested] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Speech-to-text functionality
+  const [isListening, setIsListening] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [finalTranscript, setFinalTranscript] = useState("");
+  const [speechText, setSpeechText] = useState("");
+  const [speechRecognitionError, setSpeechRecognitionError] = useState<
+    string | null
+  >(null);
+  const [speechRecognitionAvailable, setSpeechRecognitionAvailable] =
+    useState(true);
+  const [networkStatus, setNetworkStatus] = useState<string>("checking");
+  const [isModelLoading, setIsModelLoading] = useState(false);
+  const [polyfillManager] = useState(() => SpeechPolyfillManager.getInstance());
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(10);
@@ -204,6 +227,158 @@ const InterviewPage = () => {
     };
   }, [showThemeMenu]);
 
+  // Cleanup camera stream on unmount
+  useEffect(() => {
+    return () => {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [cameraStream]);
+
+  // Cleanup speech recognition on unmount
+  useEffect(() => {
+    return () => {
+      // Speech recognition cleanup is now handled by the SpeechRecognizer component
+      console.log("🎤 Speech recognition cleanup handled by component");
+    };
+  }, [isListening]);
+
+  // Check network status
+  useEffect(() => {
+    const checkNetworkStatus = () => {
+      // Use navigator.onLine as primary check
+      if (navigator.onLine) {
+        setNetworkStatus("online");
+        console.log("🌐 Network status: Online (navigator.onLine)");
+      } else {
+        setNetworkStatus("offline");
+        console.log("🌐 Network status: Offline (navigator.onLine)");
+      }
+    };
+
+    // Initial check
+    checkNetworkStatus();
+
+    // Listen for online/offline events
+    const handleOnline = () => {
+      setNetworkStatus("online");
+      console.log("🌐 Network came back online");
+    };
+
+    const handleOffline = () => {
+      setNetworkStatus("offline");
+      console.log("🌐 Network went offline");
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Also do a periodic fetch test as backup
+    const interval = setInterval(async () => {
+      try {
+        await fetch("https://www.google.com", {
+          method: "HEAD",
+          mode: "no-cors",
+        });
+        setNetworkStatus("online");
+      } catch (error) {
+        setNetworkStatus("offline");
+      }
+    }, 60000); // Check every minute
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Auto-request camera when interview starts
+  useEffect(() => {
+    if (isInterviewStarted && cameraPermission === "pending" && !cameraStream) {
+      // Small delay to ensure UI is ready
+      const timer = setTimeout(() => {
+        setShowCameraRequest(true);
+        // Auto-trigger camera request after modal shows
+        setTimeout(() => {
+          requestCameraPermission();
+        }, 500);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isInterviewStarted, cameraPermission, cameraStream]);
+
+  // Fallback: if camera permission is stuck in pending for too long, set to denied
+  useEffect(() => {
+    if (cameraPermission === "pending" && showCameraRequest) {
+      const fallbackTimer = setTimeout(() => {
+        console.log("⏰ Camera permission timeout, setting to denied");
+        setCameraPermission("denied");
+      }, 15000); // 15 seconds timeout
+
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [cameraPermission, showCameraRequest]);
+
+  // Ensure video element gets the stream when both are available
+  useEffect(() => {
+    if (cameraStream && videoRef.current && isVideoOn) {
+      console.log("🎥 Setting video stream to element");
+      videoRef.current.srcObject = cameraStream;
+
+      // Force play with multiple attempts
+      const playVideo = async () => {
+        try {
+          await videoRef.current!.play();
+          console.log("🎥 Video playing successfully");
+        } catch (error) {
+          console.error("🎥 Video play failed:", error);
+          // Try again after a short delay
+          setTimeout(() => {
+            videoRef.current?.play().catch(console.error);
+          }, 100);
+        }
+      };
+
+      playVideo();
+    }
+  }, [cameraStream, isVideoOn]);
+
+  // Initialize speech recognition with polyfills
+  useEffect(() => {
+    const initializeSpeechRecognition = async () => {
+      if (typeof window !== "undefined") {
+        console.log("🎤 Initializing speech recognition with polyfills...");
+        setIsModelLoading(true);
+
+        try {
+          // Initialize polyfills for better cross-browser support
+          const success = await polyfillManager.initializePolyfills({
+            // Add your API keys here if using cloud polyfills
+            // speechly: { appId: 'your-speechly-app-id' },
+            // azure: { subscriptionKey: 'your-key', region: 'your-region' }
+          });
+
+          if (success) {
+            setSpeechRecognitionAvailable(true);
+            console.log("🎤 Speech recognition initialized successfully");
+          } else {
+            setSpeechRecognitionAvailable(false);
+            console.warn("🎤 Speech recognition may not work in this browser");
+          }
+        } catch (error) {
+          console.error("🎤 Failed to initialize speech recognition:", error);
+          setSpeechRecognitionAvailable(false);
+        } finally {
+          setIsModelLoading(false);
+        }
+      }
+    };
+
+    initializeSpeechRecognition();
+  }, [polyfillManager]);
+
   // Auto-end interview function
   const handleAutoEndInterview = async () => {
     if (interviewId) {
@@ -323,6 +498,7 @@ const InterviewPage = () => {
 
   const startInterviewProcess = async () => {
     setIsInterviewStarted(true);
+    setShowCameraRequest(true);
 
     // Start the 45-minute timer
     setInterviewStartTime(new Date());
@@ -600,10 +776,37 @@ const InterviewPage = () => {
   };
 
   const handleToggleVideo = () => {
-    setIsVideoOn(!isVideoOn);
+    if (isVideoOn) {
+      // Turn off video
+      if (cameraStream) {
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.enabled = false;
+        }
+      }
+      setIsVideoOn(false);
+    } else {
+      // Turn on video
+      if (cameraStream) {
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        if (videoTrack) {
+          videoTrack.enabled = true;
+        }
+        setIsVideoOn(true);
+      } else {
+        // Request camera permission if no stream
+        setShowCameraRequest(true);
+      }
+    }
   };
 
   const handleToggleMic = () => {
+    if (cameraStream) {
+      const audioTrack = cameraStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = !isMicOn;
+      }
+    }
     setIsMicOn(!isMicOn);
   };
 
@@ -611,14 +814,182 @@ const InterviewPage = () => {
     setIsMuted(!isMuted);
   };
 
-  const handleStartRecording = () => {
+  const handleStartRecording = async () => {
     setIsRecording(true);
     setIsAISpeaking(false); // AI stops speaking when user starts
+
+    // Request microphone permission first
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("🎤 Microphone permission granted");
+    } catch (error) {
+      console.error("🎤 Microphone permission denied:", error);
+      alert(
+        "Microphone access is required for speech recognition. Please allow microphone access and try again. You can still type your answer manually."
+      );
+      setIsRecording(false);
+      return;
+    }
+
+    // Clear previous transcripts
+    setInterimTranscript("");
+    setFinalTranscript("");
+    setSpeechText("");
+    setUserAnswer("");
+    setSpeechRecognitionError(null);
+
+    console.log(
+      "🎤 Recording started - speech recognition will be handled by component"
+    );
   };
 
   const handleStopRecording = () => {
     setIsRecording(false);
     setIsAISpeaking(true); // AI starts speaking when user stops
+
+    // Finalize the transcript
+    const finalText = (finalTranscript + interimTranscript).trim();
+    if (finalText) {
+      setUserAnswer(finalText);
+      console.log("🎤 Final transcript:", finalText);
+    }
+  };
+
+  // Handle transcript updates from speech recognition
+  const handleTranscriptUpdate = (transcript: string) => {
+    setSpeechText(transcript);
+    setUserAnswer(transcript);
+  };
+
+  // Handle listening state changes
+  const handleListeningChange = (listening: boolean) => {
+    setIsListening(listening);
+  };
+
+  // Camera functions
+  const requestCameraPermission = async () => {
+    try {
+      setCameraPermission("pending");
+      console.log("🎥 Requesting camera permission...");
+
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Camera not supported in this browser");
+      }
+
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Camera request timeout")), 10000);
+      });
+
+      const streamPromise = navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+        audio: true,
+      });
+
+      const stream = (await Promise.race([
+        streamPromise,
+        timeoutPromise,
+      ])) as MediaStream;
+      console.log("🎥 Camera permission granted, stream received:", stream);
+
+      setCameraStream(stream);
+      setCameraPermission("granted");
+      setIsVideoOn(true);
+      setShowCameraRequest(false);
+
+      // Set the video stream to the video element with multiple retry attempts
+      const setupVideo = (retryCount = 0) => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(console.error);
+          console.log("🎥 Video element updated with stream");
+
+          // Add event listeners for debugging
+          videoRef.current.onloadedmetadata = () => {
+            console.log("🎥 Video metadata loaded");
+          };
+          videoRef.current.oncanplay = () => {
+            console.log("🎥 Video can play");
+          };
+          videoRef.current.onerror = (e) => {
+            console.error("🎥 Video error:", e);
+          };
+        } else if (retryCount < 5) {
+          console.log(`🎥 Video ref is null! Retrying ${retryCount + 1}/5...`);
+          setTimeout(() => {
+            setupVideo(retryCount + 1);
+          }, 500 * (retryCount + 1)); // Increasing delay
+        } else {
+          console.error("🎥 Video element not available after 5 retries");
+        }
+      };
+
+      setupVideo();
+    } catch (error) {
+      console.error("🎥 Camera permission error:", error);
+      setCameraPermission("denied");
+      // Keep the modal open to allow retry
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((track) => track.stop());
+      setCameraStream(null);
+      setIsVideoOn(false);
+    }
+  };
+
+  const handleStartInterview = () => {
+    setIsInterviewStarted(true);
+    setShowCameraRequest(true);
+  };
+
+  const handleTestCamera = async () => {
+    try {
+      console.log("🎥 Testing camera from guidelines modal...");
+      setCameraPermission("pending");
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+        audio: true,
+      });
+
+      console.log("🎥 Camera test successful, stream received:", stream);
+      setCameraStream(stream);
+      setCameraPermission("granted");
+      setCameraTested(true);
+      setIsVideoOn(true);
+
+      // Set the video stream to the video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(console.error);
+      }
+
+      // Stop the stream after a short test
+      setTimeout(() => {
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+        }
+        setCameraStream(null);
+        setIsVideoOn(false);
+        console.log("🎥 Camera test completed, stream stopped");
+      }, 3000); // Test for 3 seconds
+    } catch (error) {
+      console.error("🎥 Camera test failed:", error);
+      setCameraPermission("denied");
+      setCameraTested(false);
+    }
   };
 
   const handleEndInterview = async () => {
@@ -738,12 +1109,7 @@ const InterviewPage = () => {
       );
       // handleEndInterview(); // DISABLED FOR NOW
     }
-  }, [
-    tabSwitchCount,
-    isInterviewStarted,
-    handleEndInterview,
-    warningShownForCurrentCount,
-  ]);
+  }, [tabSwitchCount, isInterviewStarted, warningShownForCurrentCount]);
 
   const confirmExitInterview = () => {
     setIsInterviewStarted(false);
@@ -837,17 +1203,13 @@ const InterviewPage = () => {
         isDarkMode
           ? "bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900"
           : "bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50"
-      } ${
-        warningStatus.warningCount > 0 && !warningStatus.isTerminated
-          ? warningStatus.warningCount === 1
-            ? "warning-border-yellow"
-            : "warning-border-red"
-          : ""
       }`}>
       {/* Guidelines Modal */}
       <InterviewGuidelinesModal
         isOpen={isGuidelinesModalOpen}
         onStartInterview={handleGuidelinesComplete}
+        onTestCamera={handleTestCamera}
+        cameraTested={cameraTested}
       />
 
       {/* Initial Warning Modal */}
@@ -1111,9 +1473,9 @@ const InterviewPage = () => {
                 {formatTime(timeRemaining)}
               </div>
               {/* <div
-                className={`text-xs ${
+              className={`text-xs ${
                   isDarkMode ? "text-slate-400" : "text-slate-500"
-                }`}>
+              }`}>
                 Time
               </div> */}
             </div>
@@ -1215,35 +1577,109 @@ const InterviewPage = () => {
       </div>
 
       {/* Main Interview Interface */}
-      <div className="h-[calc(100vh-4rem)] w-full flex">
+      <div className="h-[calc(100vh-4rem)] w-full flex bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
         {/* Left Panel - Main Interview Area */}
         <div className="w-[70%] flex flex-col">
           {/* Video Area */}
-          <div className="flex-1 p-6 min-h-0">
+          <div className="flex-1 px-4 pt-4 min-h-0">
             <div className="h-full flex flex-col min-h-0">
               {/* Main Video Area */}
-              <div className="flex-1 mb-4 min-h-0">
+              <div className="flex-1 mb-6 min-h-0">
                 <div
-                  className={`h-full relative rounded-xl overflow-hidden border-2 ${
+                  className={`h-full relative rounded-2xl overflow-hidden shadow-2xl ${
                     isDarkMode
-                      ? "bg-gradient-to-br from-slate-800 to-slate-900 border-slate-600"
-                      : "bg-gradient-to-br from-slate-100 to-slate-200 border-slate-300"
+                      ? "bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900"
+                      : "bg-gradient-to-br from-slate-50 via-white to-slate-50"
+                  } ${
+                    warningStatus.warningCount > 0 &&
+                    !warningStatus.isTerminated
+                      ? warningStatus.warningCount === 1
+                        ? "warning-border-yellow"
+                        : "warning-border-red"
+                      : ""
                   }`}>
-                  {isVideoOn ? (
+                  {isVideoOn && cameraStream ? (
                     <div className="w-full h-full relative">
-                      <Image
-                        src={CandidateImage}
-                        alt="Candidate"
-                        fill
-                        className="object-cover"
+                      <video
+                        ref={videoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover"
+                        onLoadedMetadata={() =>
+                          console.log("🎥 Video metadata loaded in element")
+                        }
+                        onCanPlay={() =>
+                          console.log("🎥 Video can play in element")
+                        }
+                        onError={(e) =>
+                          console.error("🎥 Video error in element:", e)
+                        }
+                        style={{ backgroundColor: "black" }}
                       />
 
+                      {/* Debug info overlay */}
+                      <div className="absolute top-4 right-4 bg-black/50 text-white text-xs p-2 rounded">
+                        <div>Camera: {cameraStream ? "✅" : "❌"}</div>
+                        <div>Video: {isVideoOn ? "✅" : "❌"}</div>
+                        <div>Permission: {cameraPermission}</div>
+                        <div>Recording: {isRecording ? "✅" : "❌"}</div>
+                        <div>Listening: {isListening ? "✅" : "❌"}</div>
+                        <div>
+                          Speech Available:{" "}
+                          {speechRecognitionAvailable ? "✅" : "❌"}
+                        </div>
+                        <div>
+                          Network:{" "}
+                          {networkStatus === "online"
+                            ? "✅"
+                            : networkStatus === "offline"
+                            ? "❌"
+                            : "🔄"}
+                        </div>
+                        <div>Loading: {isModelLoading ? "🔄" : "✅"}</div>
+                        {speechRecognitionError && (
+                          <div>Error: {speechRecognitionError}</div>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (videoRef.current && cameraStream) {
+                              videoRef.current.srcObject = cameraStream;
+                              videoRef.current.play().catch(console.error);
+                            }
+                          }}
+                          className="mt-1 px-2 py-1 bg-blue-500 text-white rounded text-xs">
+                          Refresh Video
+                        </button>
+                        <button
+                          onClick={() => {
+                            console.log("🎤 Testing speech recognition...");
+                            // The SpeechRecognizer component will handle the test
+                            console.log("🎤 Speech recognition test initiated");
+                          }}
+                          className="mt-1 px-2 py-1 bg-green-500 text-white rounded text-xs">
+                          Test Speech
+                        </button>
+                      </div>
+
                       {/* Live Transcription Overlay */}
-                      {liveTranscription && (
+                      {(liveTranscription ||
+                        (isRecording &&
+                          (interimTranscript || finalTranscript))) && (
                         <div className="absolute bottom-4 left-4 right-4 bg-slate-900/80 backdrop-blur-sm rounded-lg p-4">
                           <p className="text-white text-sm leading-relaxed">
-                            {liveTranscription}
+                            {liveTranscription ||
+                              finalTranscript + interimTranscript}
                           </p>
+                          {isRecording &&
+                            (interimTranscript || finalTranscript) && (
+                              <div className="mt-2 flex items-center space-x-2">
+                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                                <span className="text-xs text-red-300">
+                                  Listening...
+                                </span>
+                              </div>
+                            )}
                         </div>
                       )}
 
@@ -1255,12 +1691,12 @@ const InterviewPage = () => {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: 20 }}
                             transition={{ duration: 0.3, ease: "easeOut" }}
-                            className="absolute inset-4 flex items-center justify-center pointer-events-auto">
+                            className="absolute inset-6 flex items-center justify-center pointer-events-auto">
                             <motion.div
                               initial={{ y: 10, opacity: 0 }}
                               animate={{ y: 0, opacity: 1 }}
                               transition={{ delay: 0.1, duration: 0.2 }}
-                              className={`max-w-2xl mx-4 p-4 rounded-lg ${
+                              className={`max-w-3xl mx-4 p-6 rounded-2xl shadow-2xl ${
                                 isDarkMode
                                   ? "bg-black/30 text-white backdrop-blur-sm border border-white/20"
                                   : "bg-white/30 text-slate-900 backdrop-blur-sm border border-black/20"
@@ -1324,14 +1760,89 @@ const InterviewPage = () => {
                     </div>
                   ) : (
                     <div
-                      className={`w-full h-full flex items-center justify-center ${
+                      className={`w-full h-full flex flex-col items-center justify-center ${
                         isDarkMode ? "bg-slate-800" : "bg-slate-100"
                       }`}>
-                      <VideoOff
-                        className={`w-16 h-16 ${
-                          isDarkMode ? "text-slate-400" : "text-slate-500"
-                        }`}
-                      />
+                      {cameraPermission === "denied" ? (
+                        <>
+                          <VideoOff
+                            className={`w-16 h-16 mb-4 ${
+                              isDarkMode ? "text-red-400" : "text-red-500"
+                            }`}
+                          />
+                          <h3
+                            className={`text-lg font-semibold mb-2 ${
+                              isDarkMode ? "text-white" : "text-slate-900"
+                            }`}>
+                            Camera Access Denied
+                          </h3>
+                          <p
+                            className={`text-sm text-center mb-4 ${
+                              isDarkMode ? "text-slate-300" : "text-slate-600"
+                            }`}>
+                            Please enable camera access to continue with the
+                            interview.
+                          </p>
+                          <button
+                            onClick={() => setShowCameraRequest(true)}
+                            className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${
+                              isDarkMode
+                                ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                : "bg-blue-500 hover:bg-blue-600 text-white"
+                            }`}>
+                            Enable Camera
+                          </button>
+                        </>
+                      ) : !isVideoOn ? (
+                        <>
+                          <VideoOff
+                            className={`w-16 h-16 mb-4 ${
+                              isDarkMode ? "text-slate-400" : "text-slate-500"
+                            }`}
+                          />
+                          <h3
+                            className={`text-lg font-semibold mb-2 ${
+                              isDarkMode ? "text-white" : "text-slate-900"
+                            }`}>
+                            Camera is Off
+                          </h3>
+                          <p
+                            className={`text-sm text-center mb-4 ${
+                              isDarkMode ? "text-slate-300" : "text-slate-600"
+                            }`}>
+                            Click the video button to turn on your camera.
+                          </p>
+                          <button
+                            onClick={handleToggleVideo}
+                            className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${
+                              isDarkMode
+                                ? "bg-green-600 hover:bg-green-700 text-white"
+                                : "bg-green-500 hover:bg-green-600 text-white"
+                            }`}>
+                            Turn On Camera
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <Video
+                            className={`w-16 h-16 mb-4 ${
+                              isDarkMode ? "text-slate-400" : "text-slate-500"
+                            }`}
+                          />
+                          <h3
+                            className={`text-lg font-semibold mb-2 ${
+                              isDarkMode ? "text-white" : "text-slate-900"
+                            }`}>
+                            Starting Camera...
+                          </h3>
+                          <p
+                            className={`text-sm text-center ${
+                              isDarkMode ? "text-slate-300" : "text-slate-600"
+                            }`}>
+                            Please wait while we set up your camera.
+                          </p>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1348,41 +1859,47 @@ const InterviewPage = () => {
                   {/* Start Answering Button - Bottom Left */}
                   <div className="absolute bottom-4 left-4">
                     {!isRecording ? (
-                      <button
+                      <motion.button
+                        whileHover={{ scale: 1.05, y: -1 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={handleStartRecording}
-                        className="flex items-center space-x-2 px-4 py-2 bg-slate-700 hover:bg-slate-800 text-white rounded-lg transition-all duration-200 font-medium text-sm shadow-lg">
+                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl transition-all duration-300 font-bold text-xs shadow-lg hover:shadow-blue-500/25">
                         <Play className="w-4 h-4" />
                         <span>Start Answering</span>
-                      </button>
+                      </motion.button>
                     ) : (
-                      <button
+                      <motion.button
+                        whileHover={{ scale: 1.05, y: -1 }}
+                        whileTap={{ scale: 0.95 }}
                         onClick={handleStopRecording}
-                        className="flex items-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 font-medium text-sm shadow-lg">
+                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl transition-all duration-300 font-bold text-xs shadow-lg hover:shadow-red-500/25">
                         <Square className="w-4 h-4" />
-                        <span>Stop Answering</span>
-                      </button>
+                        <span>
+                          {isListening ? "Stop Listening" : "Stop Answering"}
+                        </span>
+                      </motion.button>
                     )}
                   </div>
 
                   {/* View Hint Button - Top Right */}
                   <div className="absolute top-4 right-4 z-10">
                     <motion.button
-                      whileHover={{ scale: 1.05 }}
+                      whileHover={{ scale: 1.05, y: -1 }}
                       whileTap={{ scale: 0.95 }}
                       onClick={handleHintToggle}
-                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-xl ${
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 shadow-lg backdrop-blur-md ${
                         showHint
                           ? isDarkMode
-                            ? "bg-yellow-500/90 text-yellow-900 border-2 border-yellow-400 hover:bg-yellow-400 hover:text-yellow-900"
-                            : "bg-yellow-400 text-yellow-900 border-2 border-yellow-500 hover:bg-yellow-300 hover:text-yellow-800"
+                            ? "bg-gradient-to-r from-yellow-500 to-yellow-400 text-yellow-900 shadow-yellow-500/25 hover:shadow-yellow-500/40"
+                            : "bg-gradient-to-r from-yellow-400 to-yellow-300 text-yellow-900 shadow-yellow-400/25 hover:shadow-yellow-400/40"
                           : isDarkMode
-                          ? "bg-slate-900/90 text-white border-2 border-slate-400 hover:bg-slate-800 hover:border-slate-300 backdrop-blur-sm"
-                          : "bg-white/90 text-slate-800 border-2 border-slate-400 hover:bg-slate-100 hover:border-slate-500 backdrop-blur-sm"
+                          ? "bg-slate-800/80 text-white border border-slate-600/50 hover:bg-slate-700/80 hover:border-slate-500/50"
+                          : "bg-white/80 text-slate-800 border border-slate-200/50 hover:bg-slate-50/80 hover:border-slate-300/50"
                       }`}>
                       <Eye
                         className={`w-4 h-4 ${showHint ? "animate-pulse" : ""}`}
                       />
-                      <span className="font-semibold">
+                      <span className="font-bold">
                         {showHint ? "Hide Copilot" : "AI Copilot"}
                       </span>
                     </motion.button>
@@ -1407,60 +1924,161 @@ const InterviewPage = () => {
                       className={`text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1 shadow-lg ${
                         isRecording ? "bg-slate-700" : "bg-slate-600"
                       }`}>
-                      <Mic className="w-3 h-3" />
+                      <Mic
+                        className={`w-3 h-3 ${
+                          isListening ? "animate-pulse" : ""
+                        }`}
+                      />
                       <span>
-                        {isRecording ? "Listening..." : "Speaking..."}
+                        {isRecording
+                          ? isListening
+                            ? "Listening..."
+                            : "Preparing..."
+                          : "Speaking..."}
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Action Buttons */}
-              <div
-                className={`flex items-center justify-between flex-shrink-0 p-4 rounded-xl border-2 ${
-                  isDarkMode
-                    ? "bg-slate-800/90 backdrop-blur-sm border-slate-600"
-                    : "bg-white/90 backdrop-blur-sm border-slate-200"
-                }`}>
-                {/* Interview Tags */}
-                <div className="flex items-center space-x-3">
-                  <span
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium ${
+          {/* Speech Recognition Component */}
+          <div className="px-4 pb-2">
+            <SpeechRecognizer
+              onTranscript={handleTranscriptUpdate}
+              onListeningChange={handleListeningChange}
+              language="en-US"
+              continuous={true}
+              isRecording={isRecording}
+            />
+          </div>
+
+          {/* Chat Input Area */}
+          <div className="px-4 pb-4">
+            <div
+              className={`relative rounded-2xl shadow-lg ${
+                isDarkMode
+                  ? "bg-slate-800/90 border border-slate-600/30 focus-within:border-blue-500/50"
+                  : "bg-white/90 border border-slate-300/30 focus-within:border-blue-500/50"
+              } ${
+                isRecording && isListening
+                  ? "ring-2 ring-blue-500/30 border-blue-500/50"
+                  : ""
+              } transition-all duration-300`}>
+              <div className="px-2">
+                {/* Speech-to-text Status Indicator */}
+                {isRecording && (
+                  <div className="flex items-center space-x-2 mb-2 px-2 py-1">
+                    <div className="flex items-center space-x-1">
+                      {speechRecognitionAvailable ? (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                      ) : (
+                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      )}
+                      <span
+                        className={`text-xs font-medium ${
+                          speechRecognitionAvailable
+                            ? isDarkMode
+                              ? "text-blue-400"
+                              : "text-blue-600"
+                            : isDarkMode
+                            ? "text-red-400"
+                            : "text-red-600"
+                        }`}>
+                        {speechRecognitionAvailable
+                          ? isListening
+                            ? "Listening..."
+                            : "Preparing speech recognition..."
+                          : speechRecognitionError === "network" ||
+                            networkStatus === "offline"
+                          ? "Speech recognition unavailable (no internet)"
+                          : "Speech recognition unavailable"}
+                      </span>
+                    </div>
+                    {interimTranscript && speechRecognitionAvailable && (
+                      <div className="flex-1 text-right">
+                        <span
+                          className={`text-xs ${
+                            isDarkMode ? "text-slate-400" : "text-slate-500"
+                          }`}>
+                          {interimTranscript.length} characters
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Input Field */}
+                <div className="pr-20">
+                  <textarea
+                    placeholder={
+                      isGeneratingQuestion
+                        ? "Generating question..."
+                        : isRecording
+                        ? speechRecognitionAvailable
+                          ? "Speak your answer... (speech-to-text active)"
+                          : "Type your answer here... (speech-to-text unavailable)"
+                        : speechRecognitionAvailable
+                        ? "Type your answer here or click 'Start Answering' to speak..."
+                        : "Type your answer here... (speech-to-text unavailable)"
+                    }
+                    rows={4}
+                    value={userAnswer}
+                    onChange={(e) => setUserAnswer(e.target.value)}
+                    disabled={
+                      isGeneratingQuestion ||
+                      isSubmittingAnswer ||
+                      !currentQuestion
+                    }
+                    className={`w-full text-sm resize-none focus:outline-none transition-all duration-300 py-3 px-2 leading-relaxed ${
                       isDarkMode
-                        ? "bg-green-500/20 text-green-400 border border-green-500/30"
-                        : "bg-green-100 text-green-700 border border-green-300"
-                    }`}>
-                    Entry Level
-                  </span>
-                  <span
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                      isDarkMode
-                        ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                        : "bg-blue-100 text-blue-700 border border-blue-300"
-                    }`}>
-                    Frontend
-                  </span>
-                  <span
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium ${
-                      isDarkMode
-                        ? "bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
-                        : "bg-yellow-100 text-yellow-700 border border-yellow-300"
-                    }`}>
-                    Easy
-                  </span>
+                        ? "bg-transparent text-white placeholder-slate-400"
+                        : "bg-transparent text-slate-900 placeholder-slate-500"
+                    } ${
+                      isGeneratingQuestion ||
+                      isSubmittingAnswer ||
+                      !currentQuestion
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    } ${
+                      isRecording && isListening
+                        ? "border-l-4 border-blue-500 pl-2"
+                        : ""
+                    }`}
+                  />
                 </div>
 
-                {/* End Interview Button */}
-                <button
-                  onClick={handleEndInterview}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isDarkMode
-                      ? "bg-red-600 text-white hover:bg-red-700"
-                      : "bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
+                {/* Send Button - Bottom Right */}
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={handleSubmitAnswer}
+                  disabled={
+                    isGeneratingQuestion ||
+                    isSubmittingAnswer ||
+                    !currentQuestion ||
+                    !userAnswer.trim()
+                  }
+                  className={`absolute bottom-3 right-3 px-4 py-2 rounded-xl transition-all duration-300 flex items-center justify-center space-x-1 font-bold ${
+                    isGeneratingQuestion ||
+                    isSubmittingAnswer ||
+                    !currentQuestion ||
+                    !userAnswer.trim()
+                      ? "opacity-50 cursor-not-allowed bg-slate-500"
+                      : isDarkMode
+                      ? "bg-blue-500/10 border border-blue-400 text-blue-400 hover:bg-blue-500/20 hover:border-blue-300 hover:text-blue-300"
+                      : "bg-blue-500/10 border border-blue-500 text-blue-500 hover:bg-blue-500/20 hover:border-blue-400 hover:text-blue-400"
                   }`}>
-                  End Interview
-                </button>
+                  {isSubmittingAnswer ? (
+                    <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <span className="text-xs font-bold">Send</span>
+                      <Send className="w-3 h-3" />
+                    </>
+                  )}
+                </motion.button>
               </div>
             </div>
           </div>
@@ -1468,209 +2086,130 @@ const InterviewPage = () => {
 
         {/* Right Panel - Transcript */}
         <div
-          className={`w-[30%] flex flex-col border-l-2 ${
+          className={`w-[30%] flex flex-col ${
             isDarkMode
-              ? "bg-slate-800/90 backdrop-blur-sm border-slate-600"
-              : "bg-white/90 backdrop-blur-sm border-slate-200"
+              ? "bg-gradient-to-b from-slate-900/95 to-slate-800/95 backdrop-blur-md border-l border-slate-700/50"
+              : "bg-gradient-to-b from-white/95 to-slate-50/95 backdrop-blur-md border-l border-slate-200/50"
           }`}>
+          {/* Panel Header */}
+
           {/* Chat Messages */}
           <div
             ref={chatMessagesRef}
             className={`flex-1 p-6 space-y-4 overflow-y-auto min-h-0 ${
-              isDarkMode ? "bg-slate-800/50" : "bg-slate-50/50"
+              isDarkMode ? "bg-slate-900/20" : "bg-slate-50/20"
             }`}>
             {chatMessages.map((message) => (
-              <div
+              <motion.div
                 key={message.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
                 className={`flex ${
                   message.type === "user" ? "justify-end" : "justify-start"
                 }`}>
                 <div
-                  className={`max-w-[85%] rounded-xl p-4 transition-all duration-200 hover:shadow-lg cursor-pointer ${
+                  className={`flex items-start space-x-3 max-w-[100%] ${
                     message.type === "user"
-                      ? isDarkMode
-                        ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white border border-blue-500 hover:from-blue-500 hover:to-blue-600 shadow-lg"
-                        : "bg-gradient-to-br from-blue-600 to-blue-700 text-white border border-blue-500 hover:from-blue-500 hover:to-blue-600 shadow-lg"
-                      : isDarkMode
-                      ? "bg-slate-700/90 backdrop-blur-sm text-slate-200 border border-slate-600 hover:bg-slate-600/90 shadow-lg"
-                      : "bg-white/90 backdrop-blur-sm text-slate-700 border border-slate-300 hover:bg-white shadow-lg"
+                      ? "flex-row-reverse space-x-reverse"
+                      : ""
                   }`}
                   onClick={() => handleChatMessageClick(message)}>
-                  <div className="flex items-start space-x-3">
+                  {/* Avatar */}
+                  <div
+                    className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg ${
+                      message.type === "user"
+                        ? "bg-gradient-to-br from-blue-500 to-blue-600"
+                        : isDarkMode
+                        ? "bg-gradient-to-br from-slate-700 to-slate-800"
+                        : "bg-gradient-to-br from-slate-100 to-slate-200"
+                    }`}>
+                    {message.type === "ai" ? (
+                      <Bot
+                        className={`w-5 h-5 ${
+                          isDarkMode ? "text-slate-300" : "text-slate-600"
+                        }`}
+                      />
+                    ) : (
+                      <User className="w-5 h-5 text-white" />
+                    )}
+                  </div>
+
+                  {/* Message Content */}
+                  <div
+                    className={`flex-1 min-w-0 ${
+                      message.type === "user" ? "text-right" : "text-left"
+                    }`}>
+                    {/* Header with name and timestamp */}
                     <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                      className={`flex items-center space-x-2 mb-2 ${
                         message.type === "user"
-                          ? "bg-blue-500"
-                          : isDarkMode
-                          ? "bg-slate-600"
-                          : "bg-slate-200"
+                          ? "justify-end"
+                          : "justify-start"
                       }`}>
-                      {message.type === "ai" ? (
-                        <Bot
-                          className={`w-4 h-4 ${
-                            isDarkMode ? "text-slate-300" : "text-slate-600"
-                          }`}
-                        />
-                      ) : (
-                        <User className="w-4 h-4 text-white" />
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <span
-                          className={`text-sm font-medium ${
-                            message.type === "user"
-                              ? "text-white"
-                              : isDarkMode
-                              ? "text-slate-300"
-                              : "text-slate-600"
-                          }`}>
-                          {message.type === "ai" ? "AI Interviewer" : "You"}
-                        </span>
-                        <span
-                          className={`text-xs ${
-                            message.type === "user"
-                              ? "text-blue-100"
-                              : isDarkMode
-                              ? "text-slate-500"
-                              : "text-slate-500"
-                          }`}>
-                          {message.timestamp}
-                        </span>
+                      <span
+                        className={`text-xs font-semibold ${
+                          message.type === "user"
+                            ? "text-blue-500"
+                            : isDarkMode
+                            ? "text-slate-300"
+                            : "text-slate-600"
+                        }`}>
+                        {message.type === "ai" ? "AI Interviewer" : "You"}
+                      </span>
+                      <span
+                        className={`text-xs ${
+                          isDarkMode ? "text-slate-500" : "text-slate-500"
+                        }`}>
+                        {message.timestamp}
+                      </span>
+                      {/* Message type badges */}
+                      <div
+                        className={`flex space-x-1 ${
+                          message.type === "user"
+                            ? "justify-end"
+                            : "justify-start"
+                        }`}>
                         {message.questionId && (
                           <span
-                            className={`text-xs px-2 py-1 rounded-full ${
-                              message.type === "user"
-                                ? "bg-blue-500 text-white"
-                                : isDarkMode
+                            className={`text-xs px-2 py-1 rounded-lg font-medium ${
+                              isDarkMode
                                 ? "bg-blue-500/20 text-blue-400"
-                                : "bg-blue-100 text-blue-800"
+                                : "bg-blue-100 text-blue-700"
                             }`}>
-                            Question
+                            Q
                           </span>
                         )}
                         {message.answer && (
                           <span
-                            className={`text-xs px-2 py-1 rounded-full ${
-                              message.type === "user"
-                                ? "bg-green-500 text-white"
-                                : isDarkMode
+                            className={`text-xs px-2 py-1 rounded-lg font-medium ${
+                              isDarkMode
                                 ? "bg-green-500/20 text-green-400"
-                                : "bg-green-100 text-green-800"
+                                : "bg-green-100 text-green-700"
                             }`}>
-                            Answer
+                            A
                           </span>
                         )}
                       </div>
-                      <div
-                        className={`text-sm leading-relaxed ${
-                          message.type === "user"
-                            ? "text-white"
-                            : isDarkMode
-                            ? "text-slate-200"
-                            : "text-slate-700"
-                        }`}>
-                        {message.message}
-                      </div>
+                    </div>
+
+                    {/* Message text */}
+                    <div
+                      className={`text-sm leading-relaxed break-words ${
+                        message.type === "user"
+                          ? isDarkMode
+                            ? "text-blue-200"
+                            : "text-blue-800"
+                          : isDarkMode
+                          ? "text-slate-200"
+                          : "text-slate-700"
+                      }`}>
+                      {message.message}
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </div>
-
-          {/* Chat Input */}
-          <div
-            className={`p-6 border-t-2 flex-shrink-0 ${
-              isDarkMode
-                ? "bg-slate-800/90 backdrop-blur-sm border-slate-600"
-                : "bg-white/90 backdrop-blur-sm border-slate-200"
-            }`}>
-            <div className="flex items-end space-x-4">
-              <div className="flex-1">
-                <textarea
-                  placeholder={
-                    isGeneratingQuestion
-                      ? "Generating question..."
-                      : "Type your answer here..."
-                  }
-                  rows={3}
-                  value={userAnswer}
-                  onChange={(e) => setUserAnswer(e.target.value)}
-                  disabled={
-                    isGeneratingQuestion ||
-                    isSubmittingAnswer ||
-                    !currentQuestion
-                  }
-                  className={`w-full px-4 py-3 text-sm border-2 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
-                    isDarkMode
-                      ? "bg-slate-700/90 backdrop-blur-sm border-slate-600 text-white placeholder-slate-400"
-                      : "bg-white/90 backdrop-blur-sm border-slate-300 text-slate-900 placeholder-slate-500"
-                  } ${
-                    isGeneratingQuestion ||
-                    isSubmittingAnswer ||
-                    !currentQuestion
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                />
-              </div>
-              <button
-                onClick={handleSubmitAnswer}
-                disabled={
-                  isGeneratingQuestion ||
-                  isSubmittingAnswer ||
-                  !currentQuestion ||
-                  !userAnswer.trim()
-                }
-                className={`px-6 py-3 rounded-xl transition-all duration-200 flex items-center justify-center space-x-2 font-medium ${
-                  isDarkMode
-                    ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-500 hover:to-blue-600 active:from-blue-700 active:to-blue-800"
-                    : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-500 hover:to-blue-600 active:from-blue-700 active:to-blue-800"
-                } ${
-                  isGeneratingQuestion ||
-                  isSubmittingAnswer ||
-                  !currentQuestion ||
-                  !userAnswer.trim()
-                    ? "opacity-50 cursor-not-allowed"
-                    : "shadow-lg hover:shadow-xl"
-                }`}>
-                {isSubmittingAnswer ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm">Sending...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span className="text-sm">Send</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Proctoring Status */}
-            {isProctoring && (
-              <div
-                className={`mt-3 flex items-center space-x-4 text-xs ${
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                }`}>
-                <span>
-                  Time: {Math.floor(proctoringData.timeSpent / 60)}:
-                  {(proctoringData.timeSpent % 60).toString().padStart(2, "0")}
-                </span>
-                {proctoringData.tabSwitches > 0 && (
-                  <span className="text-red-500">
-                    Tab Switches: {proctoringData.tabSwitches}
-                  </span>
-                )}
-                {proctoringData.copyPasteCount > 0 && (
-                  <span className="text-red-500">
-                    Copy/Paste: {proctoringData.copyPasteCount}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1775,6 +2314,117 @@ const InterviewPage = () => {
                   }`}>
                   Close
                 </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Camera Request Modal */}
+      <AnimatePresence>
+        {showCameraRequest && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className={`rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border-2 ${
+                isDarkMode
+                  ? "bg-slate-800/90 backdrop-blur-sm border-slate-600"
+                  : "bg-white/90 backdrop-blur-sm border-slate-200"
+              }`}>
+              <div className="text-center">
+                <div
+                  className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
+                    isDarkMode ? "bg-blue-500/20" : "bg-blue-100"
+                  }`}>
+                  {cameraPermission === "pending" ? (
+                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Video className="w-8 h-8 text-blue-500" />
+                  )}
+                </div>
+                <h3
+                  className={`text-xl font-bold mb-2 ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  {cameraPermission === "pending"
+                    ? "Requesting Camera Access..."
+                    : cameraPermission === "denied"
+                    ? "Camera Access Denied"
+                    : "Camera Access Required"}
+                </h3>
+                <p
+                  className={`text-sm mb-6 ${
+                    isDarkMode ? "text-slate-300" : "text-slate-600"
+                  }`}>
+                  {cameraPermission === "pending"
+                    ? "Please allow camera and microphone access in your browser."
+                    : cameraPermission === "denied"
+                    ? "Camera access was denied. Please click 'Retry' to try again or check your browser settings."
+                    : "To start your interview, please allow camera and microphone access."}
+                </p>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={requestCameraPermission}
+                    disabled={cameraPermission === "pending"}
+                    className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all duration-200 ${
+                      cameraPermission === "pending"
+                        ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                        : isDarkMode
+                        ? "bg-blue-600 hover:bg-blue-700 text-white"
+                        : "bg-blue-500 hover:bg-blue-600 text-white"
+                    }`}>
+                    {cameraPermission === "pending"
+                      ? "Requesting..."
+                      : cameraPermission === "denied"
+                      ? "Retry"
+                      : "Allow Access"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCameraRequest(false);
+                      if (cameraPermission === "denied") {
+                        setCameraPermission("pending");
+                      } else {
+                        // User chose to skip camera, allow interview to continue
+                        setCameraPermission("denied");
+                      }
+                    }}
+                    className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all duration-200 ${
+                      isDarkMode
+                        ? "bg-slate-600 hover:bg-slate-700 text-white"
+                        : "bg-gray-200 hover:bg-gray-300 text-slate-700"
+                    }`}>
+                    {cameraPermission === "denied" ? "Skip for Now" : "Cancel"}
+                  </button>
+                </div>
+                {cameraPermission === "denied" && (
+                  <div className="mt-3">
+                    <p className="text-red-500 text-xs mb-2">
+                      Camera access is required to continue with the interview.
+                    </p>
+                    <button
+                      onClick={() => {
+                        console.log("🔄 Manual camera retry triggered");
+                        setCameraPermission("pending");
+                        requestCameraPermission();
+                      }}
+                      className="text-blue-500 text-xs underline hover:text-blue-400">
+                      Click here to manually retry
+                    </button>
+                  </div>
+                )}
+                {cameraPermission === "pending" && (
+                  <p className="text-blue-500 text-xs mt-3">
+                    If this takes too long, try refreshing the page or check
+                    your browser permissions.
+                  </p>
+                )}
               </div>
             </motion.div>
           </motion.div>

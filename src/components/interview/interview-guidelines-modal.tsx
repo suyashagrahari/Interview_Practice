@@ -27,17 +27,21 @@ import {
 interface InterviewGuidelinesModalProps {
   isOpen: boolean;
   onStartInterview: () => void;
+  onTestCamera?: () => void;
+  cameraTested?: boolean;
 }
 
 const InterviewGuidelinesModal = ({
   isOpen,
   onStartInterview,
+  onTestCamera,
+  cameraTested = false,
 }: InterviewGuidelinesModalProps) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const handleStepCheck = (step: number) => {
     const newCheckedSteps = new Set(checkedSteps);
@@ -331,6 +335,10 @@ const InterviewGuidelinesModal = ({
                 <CheckCircle className="w-4 h-4 text-green-500" />
                 <span>All restrictions and consequences understood</span>
               </div>
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-4 h-4 text-green-500" />
+                <span>Camera functionality tested and verified</span>
+              </div>
             </div>
           </div>
 
@@ -365,6 +373,96 @@ const InterviewGuidelinesModal = ({
               I have read and understood all guidelines and agree to maintain
               professional conduct during the interview.
             </label>
+          </div>
+        </div>
+      ),
+    },
+    {
+      id: 5,
+      title: "Camera Permission Test",
+      icon: <Camera className="w-6 h-6" />,
+      content: (
+        <div className="space-y-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                  Camera Access Test
+                </h4>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                  Before starting the interview, we need to test your camera and
+                  microphone access to ensure everything is working properly.
+                </p>
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
+                  <div className="text-center">
+                    <div className="w-32 h-24 bg-gray-200 dark:bg-gray-700 rounded-lg mx-auto mb-3 flex items-center justify-center">
+                      {cameraTested ? (
+                        <CheckCircle className="w-8 h-8 text-green-500" />
+                      ) : (
+                        <Camera className="w-8 h-8 text-gray-400" />
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      {cameraTested
+                        ? "Camera test completed successfully!"
+                        : "Click 'Test Camera' to verify your camera is working"}
+                    </p>
+                    <button
+                      onClick={onTestCamera}
+                      disabled={cameraTested}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        cameraTested
+                          ? "bg-green-600 text-white cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                      }`}>
+                      {cameraTested ? "Camera Tested ✓" : "Test Camera"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-green-900 dark:text-green-100 mb-2">
+                  What to Expect
+                </h4>
+                <ul className="text-sm text-green-800 dark:text-green-200 space-y-1">
+                  <li>
+                    • Your browser will ask for camera and microphone permission
+                  </li>
+                  <li>• You'll see a live preview of your camera feed</li>
+                  <li>• Make sure you're in a well-lit area</li>
+                  <li>• Position yourself clearly in the camera view</li>
+                  <li>• Test that your microphone is working</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-amber-900 dark:text-amber-100 mb-2">
+                  Important Notes
+                </h4>
+                <ul className="text-sm text-amber-800 dark:text-amber-200 space-y-1">
+                  <li>
+                    • Camera access is required to proceed with the interview
+                  </li>
+                  <li>• If you deny permission, you cannot continue</li>
+                  <li>
+                    • Make sure to allow access when prompted by your browser
+                  </li>
+                  <li>• You can test multiple times if needed</li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       ),
