@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { requestMediaPermissions } from "@/utils/microphonePermissions";
 import {
   X,
   Camera,
@@ -29,6 +30,7 @@ interface InterviewGuidelinesModalProps {
   onStartInterview: () => void;
   onTestCamera?: () => void;
   cameraTested?: boolean;
+  onPermissionsGranted?: () => void;
 }
 
 const InterviewGuidelinesModal = ({
@@ -36,10 +38,14 @@ const InterviewGuidelinesModal = ({
   onStartInterview,
   onTestCamera,
   cameraTested = false,
+  onPermissionsGranted,
 }: InterviewGuidelinesModalProps) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
+  const [permissionsGranted, setPermissionsGranted] = useState(false);
+  const [requestingPermissions, setRequestingPermissions] = useState(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
 
   const totalSteps = 5;
 
@@ -66,11 +72,46 @@ const InterviewGuidelinesModal = ({
   };
 
   const canProceed = () => {
+    // For step 4, user must have granted permissions
+    if (currentStep === 4) {
+      return permissionsGranted;
+    }
     return checkedSteps.has(currentStep);
   };
 
   const canStartInterview = () => {
-    return checkedSteps.size === totalSteps && agreedToTerms;
+    return (
+      checkedSteps.size === totalSteps && agreedToTerms && permissionsGranted
+    );
+  };
+
+  const handleRequestPermissions = async () => {
+    setRequestingPermissions(true);
+    setPermissionError(null);
+
+    try {
+      console.log("🎥🎤 Requesting camera and microphone permissions...");
+      const result = await requestMediaPermissions();
+
+      if (result.allGranted) {
+        setPermissionsGranted(true);
+        console.log("✅ All permissions granted successfully");
+        onPermissionsGranted?.();
+      } else {
+        const errors = [];
+        if (!result.camera.granted)
+          errors.push(`Camera: ${result.camera.error}`);
+        if (!result.microphone.granted)
+          errors.push(`Microphone: ${result.microphone.error}`);
+        setPermissionError(errors.join("; "));
+        console.error("❌ Permission request failed:", errors);
+      }
+    } catch (error) {
+      console.error("❌ Error requesting permissions:", error);
+      setPermissionError("Failed to request permissions. Please try again.");
+    } finally {
+      setRequestingPermissions(false);
+    }
   };
 
   // Prevent modal from closing
@@ -310,18 +351,82 @@ const InterviewGuidelinesModal = ({
     },
     {
       id: 4,
-      title: "Final Confirmation",
+      title: "Camera & Microphone Access",
       icon: <Lock className="w-6 h-6" />,
       content: (
         <div className="space-y-4">
+          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <Camera className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+              <div>
+                <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                  Camera & Microphone Access Required
+                </h4>
+                <p className="text-sm text-blue-800 dark:text-blue-200 mb-3">
+                  To start your interview, we need permission to access your
+                  camera and microphone. This is required for the proctoring
+                  system and speech recognition.
+                </p>
+
+                {!permissionsGranted && (
+                  <div className="space-y-3">
+                    <button
+                      onClick={handleRequestPermissions}
+                      disabled={requestingPermissions}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        requestingPermissions
+                          ? "bg-gray-400 text-white cursor-not-allowed"
+                          : "bg-blue-600 hover:bg-blue-700 text-white"
+                      }`}>
+                      {requestingPermissions ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Requesting Access...</span>
+                        </div>
+                      ) : (
+                        "Allow Camera & Microphone Access"
+                      )}
+                    </button>
+
+                    {permissionError && (
+                      <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                        <p className="text-sm text-red-800 dark:text-red-200">
+                          <strong>Error:</strong> {permissionError}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {permissionsGranted && (
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle className="w-5 h-5 text-green-600 dark:text-green-400" />
+                      <p className="text-sm text-green-800 dark:text-green-200 font-medium">
+                        ✅ Camera and microphone access granted successfully!
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
             <h4 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">
               Interview Summary
             </h4>
             <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
               <div className="flex items-center space-x-2">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>Camera and microphone access confirmed</span>
+                {permissionsGranted ? (
+                  <CheckCircle className="w-4 h-4 text-green-500" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-yellow-500" />
+                )}
+                <span>
+                  Camera and microphone access{" "}
+                  {permissionsGranted ? "confirmed" : "required"}
+                </span>
               </div>
               <div className="flex items-center space-x-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />

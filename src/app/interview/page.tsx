@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -37,9 +37,10 @@ import {
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import StreamingText from "@/components/ui/streaming-text";
-import SpeechRecognizer from "@/components/speech/SpeechRecognizer";
-import { SpeechPolyfillManager } from "@/utils/speechPolyfills";
+import { useWebkitSpeechRecognition } from "@/hooks/useWebkitSpeechRecognition";
 import { useProctoring } from "@/hooks/useProctoring";
+import { isAuthenticated, getAuthTokens } from "@/lib/cookies";
+import { toast } from "@/utils/toast";
 import {
   interviewRealtimeApi,
   InterviewQuestion,
@@ -56,6 +57,61 @@ import Image from "next/image";
 const InterviewPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Video play queue to prevent concurrent play requests
+  const playQueueRef = useRef<boolean>(false);
+  const currentPlayPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Safe video play function that handles AbortError and prevents concurrent calls
+  const safeVideoPlay = useCallback(
+    async (videoElement: HTMLVideoElement): Promise<void> => {
+      // If there's already a play request in progress, wait for it to complete
+      if (currentPlayPromiseRef.current) {
+        try {
+          await currentPlayPromiseRef.current;
+        } catch (error) {
+          // Ignore errors from previous play attempts
+          console.log(
+            "Previous play request completed with error (this is normal)"
+          );
+        }
+      }
+
+      // If video is already playing, don't try to play again
+      if (!videoElement.paused) {
+        return;
+      }
+
+      try {
+        playQueueRef.current = true;
+        const playPromise = videoElement.play();
+        currentPlayPromiseRef.current = playPromise;
+
+        await playPromise;
+        console.log("🎥 Video playing successfully");
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === "AbortError") {
+            console.log(
+              "🎥 Video play request was aborted (this is normal when switching streams)"
+            );
+          } else if (error.name === "NotAllowedError") {
+            console.log(
+              "🎥 Video play was blocked by browser policy (user interaction required)"
+            );
+          } else {
+            console.error("🎥 Video play failed:", error);
+          }
+        } else {
+          console.error("🎥 Video play failed with unknown error:", error);
+        }
+      } finally {
+        playQueueRef.current = false;
+        currentPlayPromiseRef.current = null;
+      }
+    },
+    []
+  );
   const [isClient, setIsClient] = useState(false);
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
@@ -67,7 +123,6 @@ const InterviewPage = () => {
   const [cameraPermission, setCameraPermission] = useState<
     "pending" | "granted" | "denied"
   >("pending");
-  const [showCameraRequest, setShowCameraRequest] = useState(false);
   const [cameraTested, setCameraTested] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -79,11 +134,26 @@ const InterviewPage = () => {
   const [speechRecognitionError, setSpeechRecognitionError] = useState<
     string | null
   >(null);
-  const [speechRecognitionAvailable, setSpeechRecognitionAvailable] =
-    useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [permissionsGrantedInGuidelines, setPermissionsGrantedInGuidelines] =
+    useState(false);
+  // Use the new webkit speech recognition hook
+  const {
+    transcript: speechTranscript,
+    interimTranscript: webkitInterimTranscript,
+    isListening: isSpeechListening,
+    isSupported: isSpeechSupported,
+    error: speechError,
+    startListening: startSpeechListening,
+    stopListening: stopSpeechListening,
+    resetTranscript: resetSpeechTranscript,
+  } = useWebkitSpeechRecognition({
+    language: "en-US",
+    continuous: true,
+    interimResults: true,
+  });
+
   const [networkStatus, setNetworkStatus] = useState<string>("checking");
-  const [isModelLoading, setIsModelLoading] = useState(false);
-  const [polyfillManager] = useState(() => SpeechPolyfillManager.getInstance());
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(1);
   const [totalQuestions, setTotalQuestions] = useState(10);
@@ -134,6 +204,10 @@ const InterviewPage = () => {
   const [userAnswer, setUserAnswer] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
+  const [currentSessionTranscript, setCurrentSessionTranscript] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const subtitleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [showSubtitles, setShowSubtitles] = useState(false);
 
   // Warning System State
   const [warningData, setWarningData] = useState<WarningData>({
@@ -244,6 +318,15 @@ const InterviewPage = () => {
     };
   }, [isListening]);
 
+  // Cleanup subtitle timer on unmount
+  useEffect(() => {
+    return () => {
+      if (subtitleTimerRef && subtitleTimerRef.current) {
+        clearTimeout(subtitleTimerRef.current);
+      }
+    };
+  }, []);
+
   // Check network status
   useEffect(() => {
     const checkNetworkStatus = () => {
@@ -294,90 +377,62 @@ const InterviewPage = () => {
     };
   }, []);
 
-  // Auto-request camera when interview starts
-  useEffect(() => {
-    if (isInterviewStarted && cameraPermission === "pending" && !cameraStream) {
-      // Small delay to ensure UI is ready
-      const timer = setTimeout(() => {
-        setShowCameraRequest(true);
-        // Auto-trigger camera request after modal shows
-        setTimeout(() => {
-          requestCameraPermission();
-        }, 500);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isInterviewStarted, cameraPermission, cameraStream]);
-
-  // Fallback: if camera permission is stuck in pending for too long, set to denied
-  useEffect(() => {
-    if (cameraPermission === "pending" && showCameraRequest) {
-      const fallbackTimer = setTimeout(() => {
-        console.log("⏰ Camera permission timeout, setting to denied");
-        setCameraPermission("denied");
-      }, 15000); // 15 seconds timeout
-
-      return () => clearTimeout(fallbackTimer);
-    }
-  }, [cameraPermission, showCameraRequest]);
+  // Camera is now handled directly in startInterviewProcess for instant startup
 
   // Ensure video element gets the stream when both are available
   useEffect(() => {
-    if (cameraStream && videoRef.current && isVideoOn) {
+    if (cameraStream && videoRef.current) {
       console.log("🎥 Setting video stream to element");
       videoRef.current.srcObject = cameraStream;
 
-      // Force play with multiple attempts
-      const playVideo = async () => {
-        try {
-          await videoRef.current!.play();
-          console.log("🎥 Video playing successfully");
-        } catch (error) {
-          console.error("🎥 Video play failed:", error);
-          // Try again after a short delay
-          setTimeout(() => {
-            videoRef.current?.play().catch(console.error);
-          }, 100);
-        }
-      };
-
-      playVideo();
-    }
-  }, [cameraStream, isVideoOn]);
-
-  // Initialize speech recognition with polyfills
-  useEffect(() => {
-    const initializeSpeechRecognition = async () => {
-      if (typeof window !== "undefined") {
-        console.log("🎤 Initializing speech recognition with polyfills...");
-        setIsModelLoading(true);
-
-        try {
-          // Initialize polyfills for better cross-browser support
-          const success = await polyfillManager.initializePolyfills({
-            // Add your API keys here if using cloud polyfills
-            // speechly: { appId: 'your-speechly-app-id' },
-            // azure: { subscriptionKey: 'your-key', region: 'your-region' }
-          });
-
-          if (success) {
-            setSpeechRecognitionAvailable(true);
-            console.log("🎤 Speech recognition initialized successfully");
-          } else {
-            setSpeechRecognitionAvailable(false);
-            console.warn("🎤 Speech recognition may not work in this browser");
-          }
-        } catch (error) {
-          console.error("🎤 Failed to initialize speech recognition:", error);
-          setSpeechRecognitionAvailable(false);
-        } finally {
-          setIsModelLoading(false);
-        }
+      // Use safe video play function
+      if (videoRef.current) {
+        safeVideoPlay(videoRef.current);
       }
-    };
 
-    initializeSpeechRecognition();
-  }, [polyfillManager]);
+      // Ensure video is on when we have a stream
+      if (!isVideoOn) {
+        console.log("🎥 Auto-enabling video since we have camera stream");
+        setIsVideoOn(true);
+      }
+    }
+  }, [cameraStream, isVideoOn, safeVideoPlay]);
+
+  // Additional effect to ensure video is displayed when interview starts
+  useEffect(() => {
+    if (isInterviewStarted && cameraStream && videoRef.current) {
+      console.log(
+        "🎥 Interview started with camera stream - ensuring video display"
+      );
+      videoRef.current.srcObject = cameraStream;
+      setIsVideoOn(true);
+      safeVideoPlay(videoRef.current);
+    }
+  }, [isInterviewStarted, cameraStream, safeVideoPlay]);
+
+  // Handle speech recognition updates
+  useEffect(() => {
+    if (speechTranscript) {
+      setSpeechText(speechTranscript);
+      setFinalTranscript(speechTranscript);
+    }
+  }, [speechTranscript]);
+
+  useEffect(() => {
+    if (webkitInterimTranscript) {
+      setInterimTranscript(webkitInterimTranscript);
+    }
+  }, [webkitInterimTranscript]);
+
+  useEffect(() => {
+    setIsListening(isSpeechListening);
+  }, [isSpeechListening]);
+
+  useEffect(() => {
+    if (speechError) {
+      setSpeechRecognitionError(speechError);
+    }
+  }, [speechError]);
 
   // Auto-end interview function
   const handleAutoEndInterview = async () => {
@@ -386,12 +441,7 @@ const InterviewPage = () => {
         await interviewRealtimeApi.endInterview(interviewId);
 
         // Clear all interview-related localStorage data
-        localStorage.removeItem("interview-terminated");
-        localStorage.removeItem("interview-termination-reason");
-        localStorage.removeItem("interview-termination-time");
-        localStorage.removeItem("interview-warning-count");
-        localStorage.removeItem("interview-last-warning");
-        localStorage.removeItem("interview-warning-seen");
+        clearInterviewLocalStorage();
 
         // Redirect to dashboard with completion status
         router.push("/dashboard?interviewCompleted=true");
@@ -399,24 +449,14 @@ const InterviewPage = () => {
         console.error("Error auto-ending interview:", error);
 
         // Clear localStorage even if API call fails
-        localStorage.removeItem("interview-terminated");
-        localStorage.removeItem("interview-termination-reason");
-        localStorage.removeItem("interview-termination-time");
-        localStorage.removeItem("interview-warning-count");
-        localStorage.removeItem("interview-last-warning");
-        localStorage.removeItem("interview-warning-seen");
+        clearInterviewLocalStorage();
 
         // Still redirect even if there's an error
         router.push("/dashboard?interviewCompleted=true");
       }
     } else {
       // Clear localStorage even if no interview ID
-      localStorage.removeItem("interview-terminated");
-      localStorage.removeItem("interview-termination-reason");
-      localStorage.removeItem("interview-termination-time");
-      localStorage.removeItem("interview-warning-count");
-      localStorage.removeItem("interview-last-warning");
-      localStorage.removeItem("interview-warning-seen");
+      clearInterviewLocalStorage();
 
       // Redirect to dashboard even if no interview ID
       router.push("/dashboard?interviewCompleted=true");
@@ -484,6 +524,11 @@ const InterviewPage = () => {
     }
   };
 
+  const handlePermissionsGranted = () => {
+    console.log("✅ Permissions granted in guidelines step 4");
+    setPermissionsGrantedInGuidelines(true);
+  };
+
   const handleGuidelinesComplete = async () => {
     setIsGuidelinesModalOpen(false);
 
@@ -498,11 +543,19 @@ const InterviewPage = () => {
 
   const startInterviewProcess = async () => {
     setIsInterviewStarted(true);
-    setShowCameraRequest(true);
 
     // Start the 45-minute timer
     setInterviewStartTime(new Date());
     setTimeRemaining(45 * 60); // Reset to 45 minutes
+
+    // Start camera immediately if permissions were already granted
+    if (permissionsGrantedInGuidelines) {
+      console.log(
+        "🎥 Starting camera immediately (permissions already granted)"
+      );
+      setCameraPermission("granted"); // Skip pending state
+      await requestCameraPermission();
+    }
 
     // Start the real interview process
     await startRealInterview();
@@ -516,6 +569,16 @@ const InterviewPage = () => {
 
   const startRealInterview = async () => {
     try {
+      // Check if user is authenticated
+      if (!isAuthenticated()) {
+        console.error("User not authenticated. Redirecting to login...");
+        router.push("/");
+        return;
+      }
+
+      // Camera is already started in startInterviewProcess if permissions were granted
+      console.log("🎥 Interview real process started");
+
       // Get interview ID from URL params or create a new interview
       const interviewIdParam = searchParams.get("interviewId");
 
@@ -526,15 +589,34 @@ const InterviewPage = () => {
       } else {
         // Create new interview first (this would need to be implemented)
         console.log("Creating new interview...");
+        // For now, we'll need to handle this case properly
+        console.error("No interview ID provided. Cannot start interview.");
+        setError(
+          "No interview ID provided. Please start the interview from the dashboard."
+        );
       }
     } catch (error) {
       console.error("Error starting interview:", error);
+      if (error instanceof Error) {
+        setError(`Failed to start interview: ${error.message}`);
+      } else {
+        setError("Failed to start interview. Please try again.");
+      }
     }
   };
 
   const generateFirstQuestion = async (interviewId: string) => {
     try {
       setIsGeneratingQuestion(true);
+
+      // Double-check authentication before making API call
+      const { accessToken } = getAuthTokens();
+      if (!accessToken) {
+        throw new Error("No authentication token found. Please log in again.");
+      }
+
+      console.log("🎯 Generating first question for interview:", interviewId);
+      console.log("🔑 Auth token present:", !!accessToken);
 
       const response = await interviewRealtimeApi.generateFirstQuestion(
         interviewId,
@@ -555,9 +637,37 @@ const InterviewPage = () => {
 
         // Start proctoring
         startProctoring();
+        console.log("✅ First question generated and streaming started");
+      } else {
+        throw new Error(
+          response.message || "Failed to generate first question"
+        );
       }
     } catch (error) {
-      console.error("Error generating first question:", error);
+      console.error("❌ Error generating first question:", error);
+
+      if (error instanceof Error) {
+        if (
+          error.message.includes("401") ||
+          error.message.includes("Unauthorized")
+        ) {
+          setError("Authentication failed. Please log in again.");
+          // Clear auth tokens and redirect to login
+          setTimeout(() => {
+            router.push("/");
+          }, 2000);
+        } else if (error.message.includes("404")) {
+          setError(
+            "Interview not found. Please start a new interview from the dashboard."
+          );
+        } else if (error.message.includes("500")) {
+          setError("Server error. Please try again later.");
+        } else {
+          setError(`Failed to generate first question: ${error.message}`);
+        }
+      } else {
+        setError("Failed to generate first question. Please try again.");
+      }
     } finally {
       setIsGeneratingQuestion(false);
     }
@@ -574,6 +684,11 @@ const InterviewPage = () => {
     }
 
     setIsStreaming(false);
+
+    // Auto-enable Start Answering when question streaming ends
+    console.log(
+      "🎤 Question streaming completed, ready for user to start answering"
+    );
   };
 
   const streamQuestionToBoth = async (
@@ -619,6 +734,7 @@ const InterviewPage = () => {
 
     try {
       setIsSubmittingAnswer(true);
+      setIsAnalyzing(true);
       stopProctoring();
 
       const response = await interviewRealtimeApi.submitAnswer(
@@ -772,6 +888,7 @@ const InterviewPage = () => {
       console.error("Error submitting answer:", error);
     } finally {
       setIsSubmittingAnswer(false);
+      setIsAnalyzing(false);
     }
   };
 
@@ -795,7 +912,7 @@ const InterviewPage = () => {
         setIsVideoOn(true);
       } else {
         // Request camera permission if no stream
-        setShowCameraRequest(true);
+        requestCameraPermission();
       }
     }
   };
@@ -831,45 +948,115 @@ const InterviewPage = () => {
       return;
     }
 
-    // Clear previous transcripts
+    // Clear previous transcripts for new session
     setInterimTranscript("");
     setFinalTranscript("");
     setSpeechText("");
-    setUserAnswer("");
+    setCurrentSessionTranscript("");
     setSpeechRecognitionError(null);
 
-    console.log(
-      "🎤 Recording started - speech recognition will be handled by component"
-    );
+    // Start speech recognition
+    if (isSpeechSupported && startSpeechListening) {
+      console.log("🎤 Starting speech recognition");
+      startSpeechListening();
+    } else {
+      console.log(
+        "🎤 Speech recognition not supported, recording without transcription"
+      );
+    }
   };
 
   const handleStopRecording = () => {
     setIsRecording(false);
     setIsAISpeaking(true); // AI starts speaking when user stops
 
-    // Finalize the transcript
-    const finalText = (finalTranscript + interimTranscript).trim();
-    if (finalText) {
-      setUserAnswer(finalText);
-      console.log("🎤 Final transcript:", finalText);
+    // Stop speech recognition
+    if (isSpeechSupported && stopSpeechListening) {
+      console.log("🎤 Stopping speech recognition");
+      stopSpeechListening();
     }
+
+    // Clear live transcript display and subtitle timer
+    setSpeechText("");
+    setInterimTranscript("");
+    setFinalTranscript("");
+    setShowSubtitles(false);
+
+    // Clear subtitle timer
+    if (subtitleTimerRef.current) {
+      clearTimeout(subtitleTimerRef.current);
+      subtitleTimerRef.current = null;
+    }
+
+    // Keep the accumulated transcript in text area (already set via useEffect)
+    console.log(
+      "🎤 Recording stopped, transcript preserved in text area:",
+      currentSessionTranscript
+    );
   };
 
   // Handle transcript updates from speech recognition
   const handleTranscriptUpdate = (transcript: string) => {
     setSpeechText(transcript);
     setUserAnswer(transcript);
+    console.log("🎤 Transcript updated:", transcript);
   };
 
   // Handle listening state changes
   const handleListeningChange = (listening: boolean) => {
-    setIsListening(listening);
+    console.log("🎤 Listening state changed:", listening);
   };
+
+  // Update speech text when interim transcript changes (for subtitle display)
+  useEffect(() => {
+    if (webkitInterimTranscript) {
+      setSpeechText(webkitInterimTranscript);
+      setShowSubtitles(true);
+      console.log("🎤 Interim transcript updated:", webkitInterimTranscript);
+    }
+  }, [webkitInterimTranscript]);
+
+  // Handle subtitle timer separately to avoid infinite loops
+  useEffect(() => {
+    if (speechText) {
+      // Clear existing timer
+      if (subtitleTimerRef.current) {
+        clearTimeout(subtitleTimerRef.current);
+      }
+
+      // Set new timer to hide subtitles after 2 seconds of silence
+      subtitleTimerRef.current = setTimeout(() => {
+        setShowSubtitles(false);
+        console.log("🎤 Subtitles hidden after 2 seconds of silence");
+      }, 2000);
+    }
+  }, [speechText]);
+
+  // Update current session transcript when speech transcript changes
+  useEffect(() => {
+    if (speechTranscript) {
+      setCurrentSessionTranscript((prev) => {
+        // Only add new content that's not already in the session
+        const newContent = speechTranscript.replace(prev, "").trim();
+        const updated = prev + (prev ? " " : "") + newContent;
+        setUserAnswer(updated);
+        console.log("🎤 Session transcript updated:", updated);
+        return updated;
+      });
+
+      // Show subtitles when final transcript is received
+      setShowSubtitles(true);
+      setSpeechText(speechTranscript);
+    }
+  }, [speechTranscript]);
 
   // Camera functions
   const requestCameraPermission = async () => {
     try {
-      setCameraPermission("pending");
+      // Skip pending state if permissions were already granted for faster startup
+      if (!permissionsGrantedInGuidelines) {
+        setCameraPermission("pending");
+      }
       console.log("🎥 Requesting camera permission...");
 
       // Check if getUserMedia is supported
@@ -877,9 +1064,9 @@ const InterviewPage = () => {
         throw new Error("Camera not supported in this browser");
       }
 
-      // Add timeout to prevent infinite loading
+      // Reduced timeout for faster startup (5 seconds instead of 10)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Camera request timeout")), 10000);
+        setTimeout(() => reject(new Error("Camera request timeout")), 5000);
       });
 
       const streamPromise = navigator.mediaDevices.getUserMedia({
@@ -900,14 +1087,21 @@ const InterviewPage = () => {
       setCameraStream(stream);
       setCameraPermission("granted");
       setIsVideoOn(true);
-      setShowCameraRequest(false);
+
+      // Immediately set up the video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        safeVideoPlay(videoRef.current);
+      }
 
       // Set the video stream to the video element with multiple retry attempts
       const setupVideo = (retryCount = 0) => {
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(console.error);
           console.log("🎥 Video element updated with stream");
+
+          // Use safe video play function
+          safeVideoPlay(videoRef.current);
 
           // Add event listeners for debugging
           videoRef.current.onloadedmetadata = () => {
@@ -919,13 +1113,13 @@ const InterviewPage = () => {
           videoRef.current.onerror = (e) => {
             console.error("🎥 Video error:", e);
           };
-        } else if (retryCount < 5) {
-          console.log(`🎥 Video ref is null! Retrying ${retryCount + 1}/5...`);
+        } else if (retryCount < 2) {
+          console.log(`🎥 Video ref is null! Retrying ${retryCount + 1}/2...`);
           setTimeout(() => {
             setupVideo(retryCount + 1);
-          }, 500 * (retryCount + 1)); // Increasing delay
+          }, 100); // Faster retry for instant startup
         } else {
-          console.error("🎥 Video element not available after 5 retries");
+          console.error("🎥 Video element not available after 2 retries");
         }
       };
 
@@ -947,7 +1141,6 @@ const InterviewPage = () => {
 
   const handleStartInterview = () => {
     setIsInterviewStarted(true);
-    setShowCameraRequest(true);
   };
 
   const handleTestCamera = async () => {
@@ -973,7 +1166,7 @@ const InterviewPage = () => {
       // Set the video stream to the video element
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(console.error);
+        safeVideoPlay(videoRef.current);
       }
 
       // Stop the stream after a short test
@@ -992,61 +1185,110 @@ const InterviewPage = () => {
     }
   };
 
-  const handleEndInterview = async () => {
-    // Check if interview was terminated
-    if (warningStatus.isTerminated) {
-      // Clear all interview-related localStorage data
-      localStorage.removeItem("interview-terminated");
-      localStorage.removeItem("interview-termination-reason");
-      localStorage.removeItem("interview-termination-time");
-      localStorage.removeItem("interview-warning-count");
-      localStorage.removeItem("interview-last-warning");
-      localStorage.removeItem("interview-warning-seen");
-      router.push("/dashboard?interviewTerminated=true");
-      return;
-    }
+  // Helper function to clear all interview-related localStorage data
+  const clearInterviewLocalStorage = () => {
+    localStorage.removeItem("interview-terminated");
+    localStorage.removeItem("interview-termination-reason");
+    localStorage.removeItem("interview-termination-time");
+    localStorage.removeItem("interview-warning-count");
+    localStorage.removeItem("interview-last-warning");
+    localStorage.removeItem("interview-warning-seen");
+  };
 
-    // Normal interview ending
-    if (interviewId) {
-      try {
-        await interviewRealtimeApi.endInterview(interviewId);
-        console.log("Interview ended successfully via API");
+  const handleEndInterview = async () => {
+    try {
+      // Check if interview was terminated
+      if (warningStatus.isTerminated) {
+        console.log("🚫 Interview was terminated, ending via API...");
+
+        // Still call API to properly end the terminated interview
+        if (interviewId) {
+          try {
+            await interviewRealtimeApi.endInterview(interviewId);
+            console.log("✅ Terminated interview ended successfully via API");
+          } catch (error) {
+            console.error("❌ Error ending terminated interview:", error);
+          }
+        }
 
         // Clear all interview-related localStorage data
-        localStorage.removeItem("interview-terminated");
-        localStorage.removeItem("interview-termination-reason");
-        localStorage.removeItem("interview-termination-time");
-        localStorage.removeItem("interview-warning-count");
-        localStorage.removeItem("interview-last-warning");
-        localStorage.removeItem("interview-warning-seen");
+        clearInterviewLocalStorage();
 
-        // Redirect to dashboard with completion status
-        router.push("/dashboard?interviewCompleted=true");
-      } catch (error) {
-        console.error("Error ending interview:", error);
+        // Stop proctoring
+        stopProctoring();
 
-        // Clear localStorage even if API call fails
-        localStorage.removeItem("interview-terminated");
-        localStorage.removeItem("interview-termination-reason");
-        localStorage.removeItem("interview-termination-time");
-        localStorage.removeItem("interview-warning-count");
-        localStorage.removeItem("interview-last-warning");
-        localStorage.removeItem("interview-warning-seen");
+        router.push("/dashboard?interviewTerminated=true");
+        return;
+      }
 
-        // Still redirect even if there's an error
+      // Normal interview ending
+      if (interviewId) {
+        console.log("🛑 Ending interview via API...", interviewId);
+
+        // Show loading state
+        setIsGeneratingQuestion(true);
+
+        try {
+          const response = await interviewRealtimeApi.endInterview(interviewId);
+          console.log("✅ Interview ended successfully via API:", response);
+
+          // Clear all interview-related localStorage data
+          clearInterviewLocalStorage();
+
+          // Stop proctoring
+          stopProctoring();
+
+          // Show success message
+          toast.success("Interview ended successfully!");
+
+          // Redirect to dashboard with completion status
+          router.push("/dashboard?interviewCompleted=true");
+        } catch (error) {
+          console.error("❌ Error ending interview:", error);
+
+          // Show error message to user
+          const errorMessage =
+            "Failed to end interview properly, but you can still exit.";
+          setError(errorMessage);
+          toast.error(errorMessage);
+
+          // Clear localStorage even if API call fails
+          clearInterviewLocalStorage();
+
+          // Stop proctoring
+          stopProctoring();
+
+          // Still redirect even if there's an error, but with error status
+          setTimeout(() => {
+            router.push("/dashboard?interviewCompleted=true&error=endFailed");
+          }, 2000);
+        } finally {
+          setIsGeneratingQuestion(false);
+        }
+      } else {
+        console.log(
+          "⚠️ No interview ID found, clearing localStorage and redirecting..."
+        );
+
+        // Clear localStorage even if no interview ID
+        clearInterviewLocalStorage();
+
+        // Stop proctoring
+        stopProctoring();
+
         router.push("/dashboard?interviewCompleted=true");
       }
-    } else {
-      // Clear localStorage even if no interview ID
-      localStorage.removeItem("interview-terminated");
-      localStorage.removeItem("interview-termination-reason");
-      localStorage.removeItem("interview-termination-time");
-      localStorage.removeItem("interview-warning-count");
-      localStorage.removeItem("interview-last-warning");
-      localStorage.removeItem("interview-warning-seen");
+    } catch (error) {
+      console.error("❌ Unexpected error in handleEndInterview:", error);
+      setError("An unexpected error occurred while ending the interview.");
 
-      // Redirect to dashboard even if no interview ID
-      router.push("/dashboard?interviewCompleted=true");
+      // Clear localStorage and redirect as fallback
+      clearInterviewLocalStorage();
+      stopProctoring();
+
+      setTimeout(() => {
+        router.push("/dashboard?interviewCompleted=true&error=unexpected");
+      }, 2000);
     }
   };
 
@@ -1059,7 +1301,6 @@ const InterviewPage = () => {
         // User switched tabs or minimized window - increment count
         setTabSwitchCount((prevCount) => {
           const newCount = prevCount + 1;
-          console.log("Tab switch detected, new count:", newCount);
           // Reset warning shown flag for new count
           setWarningShownForCurrentCount(false);
           return newCount;
@@ -1086,44 +1327,24 @@ const InterviewPage = () => {
 
   // Handle modal display when user returns to tab
   useEffect(() => {
-    console.log(
-      "Tab switch count changed:",
-      tabSwitchCount,
-      "Interview started:",
-      isInterviewStarted,
-      "Warning shown for current count:",
-      warningShownForCurrentCount
-    );
     if (
       tabSwitchCount === 1 &&
       isInterviewStarted &&
       !warningShownForCurrentCount
     ) {
-      console.log("Showing warning modal for first tab switch");
       setShowTabSwitchModal(true);
       setWarningShownForCurrentCount(true);
     } else if (tabSwitchCount >= 2 && isInterviewStarted) {
       // Tab switch ending is disabled for now - will be enabled later with specific count threshold
-      console.log(
-        "Tab switch count reached 2 or more, but interview ending is disabled for now"
-      );
       // handleEndInterview(); // DISABLED FOR NOW
     }
   }, [tabSwitchCount, isInterviewStarted, warningShownForCurrentCount]);
 
-  const confirmExitInterview = () => {
-    setIsInterviewStarted(false);
+  const confirmExitInterview = async () => {
     setShowExitConfirm(false);
 
-    // Clear all interview-related localStorage data when exiting
-    localStorage.removeItem("interview-terminated");
-    localStorage.removeItem("interview-termination-reason");
-    localStorage.removeItem("interview-termination-time");
-    localStorage.removeItem("interview-warning-count");
-    localStorage.removeItem("interview-last-warning");
-    localStorage.removeItem("interview-warning-seen");
-
-    router.push("/dashboard");
+    // Call the proper end interview function that makes the API call
+    await handleEndInterview();
   };
 
   const cancelExitInterview = () => {
@@ -1210,6 +1431,7 @@ const InterviewPage = () => {
         onStartInterview={handleGuidelinesComplete}
         onTestCamera={handleTestCamera}
         cameraTested={cameraTested}
+        onPermissionsGranted={handlePermissionsGranted}
       />
 
       {/* Initial Warning Modal */}
@@ -1228,21 +1450,13 @@ const InterviewPage = () => {
 
       {/* Tab Switch Warning Modal */}
       <AnimatePresence>
-        {(() => {
-          console.log("Modal condition check:", {
-            showTabSwitchModal,
-            tabSwitchCount,
-            shouldShow: showTabSwitchModal && tabSwitchCount === 1,
-          });
-          return showTabSwitchModal && tabSwitchCount === 1;
-        })() && (
+        {showTabSwitchModal && tabSwitchCount === 1 && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
             onClick={() => {
-              console.log("User clicked outside modal, closing modal");
               setShowTabSwitchModal(false);
             }}>
             <motion.div
@@ -1260,13 +1474,7 @@ const InterviewPage = () => {
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  console.log("User clicked X button, closing modal");
-                  console.log(
-                    "Current showTabSwitchModal state:",
-                    showTabSwitchModal
-                  );
                   setShowTabSwitchModal(false);
-                  console.log("Modal should be closed now");
                 }}
                 className={`absolute top-4 right-4 p-2 rounded-full hover:bg-opacity-20 transition-colors ${
                   isDarkMode ? "hover:bg-white" : "hover:bg-gray-200"
@@ -1312,15 +1520,7 @@ const InterviewPage = () => {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      console.log(
-                        "User clicked 'I Understand - Continue', closing modal"
-                      );
-                      console.log(
-                        "Current showTabSwitchModal state:",
-                        showTabSwitchModal
-                      );
                       setShowTabSwitchModal(false);
-                      console.log("Modal should be closed now");
                     }}
                     className="flex-1 px-4 py-3 bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white rounded-xl transition-all duration-200 font-medium shadow-lg">
                     I Understand - Continue
@@ -1559,7 +1759,10 @@ const InterviewPage = () => {
           <div className="relative">
             <button
               onClick={() => setShowExitConfirm(true)}
+              disabled={isGeneratingQuestion}
               className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 group ${
+                isGeneratingQuestion ? "opacity-50 cursor-not-allowed" : ""
+              } ${
                 isDarkMode
                   ? "bg-red-700/50 hover:bg-red-600/50 text-red-300 border border-red-600"
                   : "bg-red-100/50 hover:bg-red-200/50 text-red-600 border border-red-200"
@@ -1598,7 +1801,7 @@ const InterviewPage = () => {
                         : "warning-border-red"
                       : ""
                   }`}>
-                  {isVideoOn && cameraStream ? (
+                  {cameraStream ? (
                     <div className="w-full h-full relative">
                       <video
                         ref={videoRef}
@@ -1606,81 +1809,41 @@ const InterviewPage = () => {
                         muted
                         playsInline
                         className="w-full h-full object-cover"
-                        onLoadedMetadata={() =>
-                          console.log("🎥 Video metadata loaded in element")
-                        }
-                        onCanPlay={() =>
-                          console.log("🎥 Video can play in element")
-                        }
+                        style={{ transform: "scaleX(-1)" }}
+                        onLoadedMetadata={() => {
+                          console.log("🎥 Video metadata loaded in element");
+                          if (videoRef.current) {
+                            safeVideoPlay(videoRef.current);
+                          }
+                        }}
+                        onCanPlay={() => {
+                          console.log("🎥 Video can play in element");
+                          if (videoRef.current) {
+                            safeVideoPlay(videoRef.current);
+                          }
+                        }}
+                        onLoadedData={() => {
+                          console.log("🎥 Video data loaded");
+                          if (videoRef.current) {
+                            safeVideoPlay(videoRef.current);
+                          }
+                        }}
                         onError={(e) =>
                           console.error("🎥 Video error in element:", e)
                         }
-                        style={{ backgroundColor: "black" }}
                       />
 
-                      {/* Debug info overlay */}
-                      <div className="absolute top-4 right-4 bg-black/50 text-white text-xs p-2 rounded">
-                        <div>Camera: {cameraStream ? "✅" : "❌"}</div>
-                        <div>Video: {isVideoOn ? "✅" : "❌"}</div>
-                        <div>Permission: {cameraPermission}</div>
-                        <div>Recording: {isRecording ? "✅" : "❌"}</div>
-                        <div>Listening: {isListening ? "✅" : "❌"}</div>
-                        <div>
-                          Speech Available:{" "}
-                          {speechRecognitionAvailable ? "✅" : "❌"}
-                        </div>
-                        <div>
-                          Network:{" "}
-                          {networkStatus === "online"
-                            ? "✅"
-                            : networkStatus === "offline"
-                            ? "❌"
-                            : "🔄"}
-                        </div>
-                        <div>Loading: {isModelLoading ? "🔄" : "✅"}</div>
-                        {speechRecognitionError && (
-                          <div>Error: {speechRecognitionError}</div>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (videoRef.current && cameraStream) {
-                              videoRef.current.srcObject = cameraStream;
-                              videoRef.current.play().catch(console.error);
-                            }
-                          }}
-                          className="mt-1 px-2 py-1 bg-blue-500 text-white rounded text-xs">
-                          Refresh Video
-                        </button>
-                        <button
-                          onClick={() => {
-                            console.log("🎤 Testing speech recognition...");
-                            // The SpeechRecognizer component will handle the test
-                            console.log("🎤 Speech recognition test initiated");
-                          }}
-                          className="mt-1 px-2 py-1 bg-green-500 text-white rounded text-xs">
-                          Test Speech
-                        </button>
-                      </div>
-
-                      {/* Live Transcription Overlay */}
-                      {(liveTranscription ||
-                        (isRecording &&
-                          (interimTranscript || finalTranscript))) && (
-                        <div className="absolute bottom-4 left-4 right-4 bg-slate-900/80 backdrop-blur-sm rounded-lg p-4">
-                          <p className="text-white text-sm leading-relaxed">
-                            {liveTranscription ||
-                              finalTranscript + interimTranscript}
+                      {/* Subtitle Overlay - Shows at bottom center of video */}
+                      {showSubtitles && speechText && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 10 }}
+                          className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-white/20">
+                          <p className="text-white text-lg font-medium text-center leading-relaxed">
+                            {speechText}
                           </p>
-                          {isRecording &&
-                            (interimTranscript || finalTranscript) && (
-                              <div className="mt-2 flex items-center space-x-2">
-                                <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                                <span className="text-xs text-red-300">
-                                  Listening...
-                                </span>
-                              </div>
-                            )}
-                        </div>
+                        </motion.div>
                       )}
 
                       {/* Hint Overlay */}
@@ -1784,7 +1947,7 @@ const InterviewPage = () => {
                             interview.
                           </p>
                           <button
-                            onClick={() => setShowCameraRequest(true)}
+                            onClick={() => requestCameraPermission()}
                             className={`px-4 py-2 rounded-lg font-semibold transition-all duration-200 ${
                               isDarkMode
                                 ? "bg-blue-600 hover:bg-blue-700 text-white"
@@ -1822,27 +1985,7 @@ const InterviewPage = () => {
                             Turn On Camera
                           </button>
                         </>
-                      ) : (
-                        <>
-                          <Video
-                            className={`w-16 h-16 mb-4 ${
-                              isDarkMode ? "text-slate-400" : "text-slate-500"
-                            }`}
-                          />
-                          <h3
-                            className={`text-lg font-semibold mb-2 ${
-                              isDarkMode ? "text-white" : "text-slate-900"
-                            }`}>
-                            Starting Camera...
-                          </h3>
-                          <p
-                            className={`text-sm text-center ${
-                              isDarkMode ? "text-slate-300" : "text-slate-600"
-                            }`}>
-                            Please wait while we set up your camera.
-                          </p>
-                        </>
-                      )}
+                      ) : null}
                     </div>
                   )}
 
@@ -1921,8 +2064,12 @@ const InterviewPage = () => {
                     </button>
                     {/* Speaking/Listening Button */}
                     <div
-                      className={`text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1 shadow-lg ${
-                        isRecording ? "bg-slate-700" : "bg-slate-600"
+                      className={`text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1 shadow-lg transition-all duration-300 ${
+                        isAnalyzing
+                          ? "bg-blue-600 animate-pulse"
+                          : isRecording
+                          ? "bg-slate-700"
+                          : "bg-slate-600"
                       }`}>
                       <Mic
                         className={`w-3 h-3 ${
@@ -1930,7 +2077,9 @@ const InterviewPage = () => {
                         }`}
                       />
                       <span>
-                        {isRecording
+                        {isAnalyzing
+                          ? "Analyzing..."
+                          : isRecording
                           ? isListening
                             ? "Listening..."
                             : "Preparing..."
@@ -1943,70 +2092,42 @@ const InterviewPage = () => {
             </div>
           </div>
 
-          {/* Speech Recognition Component */}
-          <div className="px-4 pb-2">
-            <SpeechRecognizer
-              onTranscript={handleTranscriptUpdate}
-              onListeningChange={handleListeningChange}
-              language="en-US"
-              continuous={true}
-              isRecording={isRecording}
-            />
-          </div>
-
           {/* Chat Input Area */}
           <div className="px-4 pb-4">
             <div
-              className={`relative rounded-2xl shadow-lg ${
+              className={`relative rounded-2xl shadow-lg transition-all duration-300 ${
                 isDarkMode
                   ? "bg-slate-800/90 border border-slate-600/30 focus-within:border-blue-500/50"
                   : "bg-white/90 border border-slate-300/30 focus-within:border-blue-500/50"
               } ${
+                userAnswer.trim()
+                  ? isDarkMode
+                    ? "ring-2 ring-green-500/30 border-green-500/50 bg-slate-800/95"
+                    : "ring-2 ring-green-500/30 border-green-500/50 bg-white/95"
+                  : ""
+              } ${
                 isRecording && isListening
                   ? "ring-2 ring-blue-500/30 border-blue-500/50"
                   : ""
-              } transition-all duration-300`}>
+              }`}>
               <div className="px-2">
-                {/* Speech-to-text Status Indicator */}
-                {isRecording && (
-                  <div className="flex items-center space-x-2 mb-2 px-2 py-1">
-                    <div className="flex items-center space-x-1">
-                      {speechRecognitionAvailable ? (
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                      ) : (
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                      )}
-                      <span
-                        className={`text-xs font-medium ${
-                          speechRecognitionAvailable
-                            ? isDarkMode
-                              ? "text-blue-400"
-                              : "text-blue-600"
-                            : isDarkMode
-                            ? "text-red-400"
-                            : "text-red-600"
-                        }`}>
-                        {speechRecognitionAvailable
-                          ? isListening
-                            ? "Listening..."
-                            : "Preparing speech recognition..."
-                          : speechRecognitionError === "network" ||
-                            networkStatus === "offline"
-                          ? "Speech recognition unavailable (no internet)"
-                          : "Speech recognition unavailable"}
+                {/* Content Indicator */}
+                {userAnswer.trim() && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    className="flex items-center justify-between px-2 py-1 mb-2">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                        ✨ Answer ready to send
                       </span>
                     </div>
-                    {interimTranscript && speechRecognitionAvailable && (
-                      <div className="flex-1 text-right">
-                        <span
-                          className={`text-xs ${
-                            isDarkMode ? "text-slate-400" : "text-slate-500"
-                          }`}>
-                          {interimTranscript.length} characters
-                        </span>
-                      </div>
-                    )}
-                  </div>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {userAnswer.length} characters
+                    </div>
+                  </motion.div>
                 )}
 
                 {/* Input Field */}
@@ -2016,12 +2137,8 @@ const InterviewPage = () => {
                       isGeneratingQuestion
                         ? "Generating question..."
                         : isRecording
-                        ? speechRecognitionAvailable
-                          ? "Speak your answer... (speech-to-text active)"
-                          : "Type your answer here... (speech-to-text unavailable)"
-                        : speechRecognitionAvailable
-                        ? "Type your answer here or click 'Start Answering' to speak..."
-                        : "Type your answer here... (speech-to-text unavailable)"
+                        ? "Your speech will appear above... You can also type here..."
+                        : "Type your answer here or click 'Start Answering' to speak..."
                     }
                     rows={4}
                     value={userAnswer}
@@ -2066,6 +2183,10 @@ const InterviewPage = () => {
                     !currentQuestion ||
                     !userAnswer.trim()
                       ? "opacity-50 cursor-not-allowed bg-slate-500"
+                      : userAnswer.trim()
+                      ? isDarkMode
+                        ? "bg-gradient-to-r from-green-600 to-green-500 text-white hover:from-green-500 hover:to-green-400 shadow-lg hover:shadow-green-500/25"
+                        : "bg-gradient-to-r from-green-500 to-green-600 text-white hover:from-green-400 hover:to-green-500 shadow-lg hover:shadow-green-500/25"
                       : isDarkMode
                       ? "bg-blue-500/10 border border-blue-400 text-blue-400 hover:bg-blue-500/20 hover:border-blue-300 hover:text-blue-300"
                       : "bg-blue-500/10 border border-blue-500 text-blue-500 hover:bg-blue-500/20 hover:border-blue-400 hover:text-blue-400"
@@ -2320,117 +2441,6 @@ const InterviewPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Camera Request Modal */}
-      <AnimatePresence>
-        {showCameraRequest && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className={`rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl border-2 ${
-                isDarkMode
-                  ? "bg-slate-800/90 backdrop-blur-sm border-slate-600"
-                  : "bg-white/90 backdrop-blur-sm border-slate-200"
-              }`}>
-              <div className="text-center">
-                <div
-                  className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-                    isDarkMode ? "bg-blue-500/20" : "bg-blue-100"
-                  }`}>
-                  {cameraPermission === "pending" ? (
-                    <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  ) : (
-                    <Video className="w-8 h-8 text-blue-500" />
-                  )}
-                </div>
-                <h3
-                  className={`text-xl font-bold mb-2 ${
-                    isDarkMode ? "text-white" : "text-slate-900"
-                  }`}>
-                  {cameraPermission === "pending"
-                    ? "Requesting Camera Access..."
-                    : cameraPermission === "denied"
-                    ? "Camera Access Denied"
-                    : "Camera Access Required"}
-                </h3>
-                <p
-                  className={`text-sm mb-6 ${
-                    isDarkMode ? "text-slate-300" : "text-slate-600"
-                  }`}>
-                  {cameraPermission === "pending"
-                    ? "Please allow camera and microphone access in your browser."
-                    : cameraPermission === "denied"
-                    ? "Camera access was denied. Please click 'Retry' to try again or check your browser settings."
-                    : "To start your interview, please allow camera and microphone access."}
-                </p>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={requestCameraPermission}
-                    disabled={cameraPermission === "pending"}
-                    className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all duration-200 ${
-                      cameraPermission === "pending"
-                        ? "bg-gray-400 text-gray-200 cursor-not-allowed"
-                        : isDarkMode
-                        ? "bg-blue-600 hover:bg-blue-700 text-white"
-                        : "bg-blue-500 hover:bg-blue-600 text-white"
-                    }`}>
-                    {cameraPermission === "pending"
-                      ? "Requesting..."
-                      : cameraPermission === "denied"
-                      ? "Retry"
-                      : "Allow Access"}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setShowCameraRequest(false);
-                      if (cameraPermission === "denied") {
-                        setCameraPermission("pending");
-                      } else {
-                        // User chose to skip camera, allow interview to continue
-                        setCameraPermission("denied");
-                      }
-                    }}
-                    className={`flex-1 px-4 py-3 rounded-lg font-semibold transition-all duration-200 ${
-                      isDarkMode
-                        ? "bg-slate-600 hover:bg-slate-700 text-white"
-                        : "bg-gray-200 hover:bg-gray-300 text-slate-700"
-                    }`}>
-                    {cameraPermission === "denied" ? "Skip for Now" : "Cancel"}
-                  </button>
-                </div>
-                {cameraPermission === "denied" && (
-                  <div className="mt-3">
-                    <p className="text-red-500 text-xs mb-2">
-                      Camera access is required to continue with the interview.
-                    </p>
-                    <button
-                      onClick={() => {
-                        console.log("🔄 Manual camera retry triggered");
-                        setCameraPermission("pending");
-                        requestCameraPermission();
-                      }}
-                      className="text-blue-500 text-xs underline hover:text-blue-400">
-                      Click here to manually retry
-                    </button>
-                  </div>
-                )}
-                {cameraPermission === "pending" && (
-                  <p className="text-blue-500 text-xs mt-3">
-                    If this takes too long, try refreshing the page or check
-                    your browser permissions.
-                  </p>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* Exit Confirmation Modal */}
       <AnimatePresence>
         {showExitConfirm && (
@@ -2480,8 +2490,20 @@ const InterviewPage = () => {
                   </button>
                   <button
                     onClick={confirmExitInterview}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl transition-all duration-200 font-medium shadow-lg">
-                    Yes, Sure
+                    disabled={isGeneratingQuestion}
+                    className={`flex-1 px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl transition-all duration-200 font-medium shadow-lg ${
+                      isGeneratingQuestion
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}>
+                    {isGeneratingQuestion ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>Ending...</span>
+                      </div>
+                    ) : (
+                      "Yes, Sure"
+                    )}
                   </button>
                 </div>
               </div>
