@@ -34,10 +34,11 @@ import {
   Moon,
   Palette,
   X,
+  RotateCcw,
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import StreamingText from "@/components/ui/streaming-text";
-import { useWebkitSpeechRecognition } from "@/hooks/useWebkitSpeechRecognition";
+import { useImprovedSpeechRecognition } from "@/hooks/useImprovedSpeechRecognition";
 import { useProctoring } from "@/hooks/useProctoring";
 import { isAuthenticated, getAuthTokens } from "@/lib/cookies";
 import { toast } from "@/utils/toast";
@@ -116,6 +117,7 @@ const InterviewPage = () => {
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [speechDisabled, setSpeechDisabled] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
@@ -144,13 +146,19 @@ const InterviewPage = () => {
     isListening: isSpeechListening,
     isSupported: isSpeechSupported,
     error: speechError,
-    startListening: startSpeechListening,
-    stopListening: stopSpeechListening,
+    isInitializing: isSpeechInitializing,
+    isInInterviewMode: isSpeechInInterviewMode,
+    startInterviewSession: startSpeechInterviewSession,
+    stopInterviewSession: stopSpeechInterviewSession,
     resetTranscript: resetSpeechTranscript,
-  } = useWebkitSpeechRecognition({
+    retry: retrySpeechRecognition,
+  } = useImprovedSpeechRecognition({
     language: "en-US",
     continuous: true,
     interimResults: true,
+    timeout: 600000, // 10 minutes timeout for long speech sessions
+    retryAttempts: 2, // 2 retry attempts
+    retryDelay: 2000, // 2 second delay between retries
   });
 
   const [networkStatus, setNetworkStatus] = useState<string>("checking");
@@ -412,17 +420,20 @@ const InterviewPage = () => {
 
   // Handle speech recognition updates
   useEffect(() => {
-    if (speechTranscript) {
-      setSpeechText(speechTranscript);
+    if (speechTranscript && !speechDisabled) {
       setFinalTranscript(speechTranscript);
+      // Update the session transcript and user answer (text input area)
+      setCurrentSessionTranscript(speechTranscript);
+      setUserAnswer(speechTranscript);
+      console.log("🎤 Session transcript updated:", speechTranscript);
     }
-  }, [speechTranscript]);
+  }, [speechTranscript, speechDisabled]);
 
   useEffect(() => {
-    if (webkitInterimTranscript) {
+    if (webkitInterimTranscript && !speechDisabled) {
       setInterimTranscript(webkitInterimTranscript);
     }
-  }, [webkitInterimTranscript]);
+  }, [webkitInterimTranscript, speechDisabled]);
 
   useEffect(() => {
     setIsListening(isSpeechListening);
@@ -515,6 +526,13 @@ const InterviewPage = () => {
         difficulty: "medium",
         expectedAnswer: "User should provide a relevant answer",
       });
+
+      // Clear all speech recognition data when clicking on a question
+      setCurrentSessionTranscript("");
+      setSpeechText("");
+      setInterimTranscript("");
+      setFinalTranscript("");
+      resetSpeechTranscript();
     } else if (message.type === "user" && message.answer) {
       // Show user's answer in left panel
       setCurrentQuestionData({
@@ -629,6 +647,13 @@ const InterviewPage = () => {
         setCurrentQuestion(response.data.question);
         setQuestionNumber(response.data.questionNumber);
 
+        // Clear all speech recognition data for first question
+        setCurrentSessionTranscript("");
+        setSpeechText("");
+        setInterimTranscript("");
+        setFinalTranscript("");
+        resetSpeechTranscript();
+
         // Start streaming the question to both chat and left panel
         await streamQuestionToBoth(
           response.data.question.question,
@@ -736,6 +761,12 @@ const InterviewPage = () => {
       setIsSubmittingAnswer(true);
       setIsAnalyzing(true);
       stopProctoring();
+
+      // Stop speech recognition when submitting answer
+      if (isRecording) {
+        console.log("🎤 Stopping speech recognition on answer submission");
+        handleStopRecording();
+      }
 
       const response = await interviewRealtimeApi.submitAnswer(
         interviewId,
@@ -866,6 +897,13 @@ const InterviewPage = () => {
             setUserAnswer("");
             setAnswerAnalysis(null);
 
+            // Clear all speech recognition data for new question
+            setCurrentSessionTranscript("");
+            setSpeechText("");
+            setInterimTranscript("");
+            setFinalTranscript("");
+            resetSpeechTranscript();
+
             // Stream the next question to both chat and left panel
             await streamQuestionToBoth(
               responseData.nextQuestion.question,
@@ -933,6 +971,7 @@ const InterviewPage = () => {
 
   const handleStartRecording = async () => {
     setIsRecording(true);
+    setSpeechDisabled(false); // Enable speech processing
     setIsAISpeaking(false); // AI stops speaking when user starts
 
     // Request microphone permission first
@@ -955,10 +994,10 @@ const InterviewPage = () => {
     setCurrentSessionTranscript("");
     setSpeechRecognitionError(null);
 
-    // Start speech recognition
-    if (isSpeechSupported && startSpeechListening) {
-      console.log("🎤 Starting speech recognition");
-      startSpeechListening();
+    // Start interview session with auto-restart and heartbeat
+    if (isSpeechSupported && startSpeechInterviewSession) {
+      console.log("🎤 Starting interview session with auto-restart");
+      await startSpeechInterviewSession();
     } else {
       console.log(
         "🎤 Speech recognition not supported, recording without transcription"
@@ -967,16 +1006,21 @@ const InterviewPage = () => {
   };
 
   const handleStopRecording = () => {
+    console.log("🎤 Stopping interview session and speech recognition");
     setIsRecording(false);
+    setSpeechDisabled(true); // Disable speech processing
     setIsAISpeaking(true); // AI starts speaking when user stops
 
-    // Stop speech recognition
-    if (isSpeechSupported && stopSpeechListening) {
-      console.log("🎤 Stopping speech recognition");
-      stopSpeechListening();
+    // Stop interview session - this disables auto-restart and heartbeat
+    if (isSpeechSupported && stopSpeechInterviewSession) {
+      console.log("🎤 Stopping interview session - disabling auto-restart");
+      stopSpeechInterviewSession();
     }
 
-    // Clear live transcript display and subtitle timer
+    // Force reset listening state immediately
+    setIsListening(false);
+
+    // Clear all speech recognition data and UI immediately
     setSpeechText("");
     setInterimTranscript("");
     setFinalTranscript("");
@@ -990,16 +1034,9 @@ const InterviewPage = () => {
 
     // Keep the accumulated transcript in text area (already set via useEffect)
     console.log(
-      "🎤 Recording stopped, transcript preserved in text area:",
+      "🎤 Interview session stopped, transcript preserved in text area:",
       currentSessionTranscript
     );
-  };
-
-  // Handle transcript updates from speech recognition
-  const handleTranscriptUpdate = (transcript: string) => {
-    setSpeechText(transcript);
-    setUserAnswer(transcript);
-    console.log("🎤 Transcript updated:", transcript);
   };
 
   // Handle listening state changes
@@ -1007,18 +1044,17 @@ const InterviewPage = () => {
     console.log("🎤 Listening state changed:", listening);
   };
 
-  // Update speech text when interim transcript changes (for subtitle display)
+  // Show subtitles when interim transcript changes (for subtitle display)
   useEffect(() => {
-    if (webkitInterimTranscript) {
-      setSpeechText(webkitInterimTranscript);
+    if (webkitInterimTranscript && !speechDisabled) {
       setShowSubtitles(true);
       console.log("🎤 Interim transcript updated:", webkitInterimTranscript);
     }
-  }, [webkitInterimTranscript]);
+  }, [webkitInterimTranscript, speechDisabled]);
 
   // Handle subtitle timer separately to avoid infinite loops
   useEffect(() => {
-    if (speechText) {
+    if (webkitInterimTranscript && !speechDisabled) {
       // Clear existing timer
       if (subtitleTimerRef.current) {
         clearTimeout(subtitleTimerRef.current);
@@ -1030,25 +1066,7 @@ const InterviewPage = () => {
         console.log("🎤 Subtitles hidden after 2 seconds of silence");
       }, 2000);
     }
-  }, [speechText]);
-
-  // Update current session transcript when speech transcript changes
-  useEffect(() => {
-    if (speechTranscript) {
-      setCurrentSessionTranscript((prev) => {
-        // Only add new content that's not already in the session
-        const newContent = speechTranscript.replace(prev, "").trim();
-        const updated = prev + (prev ? " " : "") + newContent;
-        setUserAnswer(updated);
-        console.log("🎤 Session transcript updated:", updated);
-        return updated;
-      });
-
-      // Show subtitles when final transcript is received
-      setShowSubtitles(true);
-      setSpeechText(speechTranscript);
-    }
-  }, [speechTranscript]);
+  }, [webkitInterimTranscript, speechDisabled]);
 
   // Camera functions
   const requestCameraPermission = async () => {
@@ -1387,6 +1405,13 @@ const InterviewPage = () => {
       setUserAnswer("");
       setAnswerAnalysis(null);
       setPendingNextQuestion(null);
+
+      // Clear all speech recognition data for new question
+      setCurrentSessionTranscript("");
+      setSpeechText("");
+      setInterimTranscript("");
+      setFinalTranscript("");
+      resetSpeechTranscript();
 
       // Stream the next question to both chat and left panel
       await streamQuestionToBoth(
@@ -1834,17 +1859,19 @@ const InterviewPage = () => {
                       />
 
                       {/* Subtitle Overlay - Shows at bottom center of video */}
-                      {showSubtitles && speechText && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: 10 }}
-                          className="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-white/20">
-                          <p className="text-white text-lg font-medium text-center leading-relaxed">
-                            {speechText}
-                          </p>
-                        </motion.div>
-                      )}
+                      {showSubtitles &&
+                        webkitInterimTranscript &&
+                        !speechDisabled && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/80 backdrop-blur-sm rounded-lg px-6 py-3 border border-white/20">
+                            <p className="text-white text-lg font-medium text-center leading-relaxed">
+                              {webkitInterimTranscript}
+                            </p>
+                          </motion.div>
+                        )}
 
                       {/* Hint Overlay */}
                       <AnimatePresence>
@@ -2006,9 +2033,18 @@ const InterviewPage = () => {
                         whileHover={{ scale: 1.05, y: -1 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={handleStartRecording}
-                        className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl transition-all duration-300 font-bold text-xs shadow-lg hover:shadow-blue-500/25">
+                        disabled={isSpeechInitializing}
+                        className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition-all duration-300 font-bold text-xs shadow-lg ${
+                          isSpeechInitializing
+                            ? "bg-gray-500 cursor-not-allowed"
+                            : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white hover:shadow-blue-500/25"
+                        }`}>
                         <Play className="w-4 h-4" />
-                        <span>Start Answering</span>
+                        <span>
+                          {isSpeechInitializing
+                            ? "Initializing..."
+                            : "Start Answering (10 min)"}
+                        </span>
                       </motion.button>
                     ) : (
                       <motion.button
@@ -2023,6 +2059,32 @@ const InterviewPage = () => {
                       </motion.button>
                     )}
                   </div>
+
+                  {/* Speech Recognition Error Display - Completely hidden during interview mode */}
+                  {false && speechRecognitionError && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute bottom-20 left-4 right-4 bg-red-500/90 backdrop-blur-sm rounded-lg p-3 border border-red-400/50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-2">
+                          <AlertCircle className="w-4 h-4 text-white" />
+                          <p className="text-white text-sm font-medium">
+                            {speechRecognitionError}
+                          </p>
+                        </div>
+                        <motion.button
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={retrySpeechRecognition}
+                          className="flex items-center space-x-1 px-3 py-1 bg-white/20 hover:bg-white/30 text-white rounded-md transition-all duration-200 text-xs font-medium">
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Retry</span>
+                        </motion.button>
+                      </div>
+                    </motion.div>
+                  )}
 
                   {/* View Hint Button - Top Right */}
                   <div className="absolute top-4 right-4 z-10">
@@ -2137,7 +2199,7 @@ const InterviewPage = () => {
                       isGeneratingQuestion
                         ? "Generating question..."
                         : isRecording
-                        ? "Your speech will appear above... You can also type here..."
+                        ? "Your speech will appear here... Click 'Send & Stop' to submit and stop recording..."
                         : "Type your answer here or click 'Start Answering' to speak..."
                     }
                     rows={4}
@@ -2195,7 +2257,9 @@ const InterviewPage = () => {
                     <div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
                   ) : (
                     <>
-                      <span className="text-xs font-bold">Send</span>
+                      <span className="text-xs font-bold">
+                        {isRecording ? "Send & Stop" : "Send"}
+                      </span>
                       <Send className="w-3 h-3" />
                     </>
                   )}
@@ -2324,6 +2388,8 @@ const InterviewPage = () => {
                           : isDarkMode
                           ? "text-slate-200"
                           : "text-slate-700"
+                      } ${
+                        message.type === "user" ? "text-left" : "text-left"
                       }`}>
                       {message.message}
                     </div>
