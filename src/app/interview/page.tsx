@@ -54,6 +54,15 @@ import WarningModal from "@/components/interview/warning-modal";
 import InitialWarningModal from "@/components/interview/initial-warning-modal";
 import { useTheme } from "@/contexts/theme-context";
 import Image from "next/image";
+import {
+  saveInterviewState,
+  restoreInterviewState,
+  clearInterviewState,
+  hasActiveSession,
+  updateInterviewState,
+  updateProctoringViolations,
+  calculateTimeRemaining,
+} from "@/lib/interview-persistence";
 
 const InterviewPage = () => {
   const router = useRouter();
@@ -273,6 +282,40 @@ const InterviewPage = () => {
       router.push("/dashboard?interviewTerminated=true");
       return;
     }
+
+    // Try to restore previous interview state if page was refreshed
+    const restoredState = restoreInterviewState();
+    if (restoredState && hasActiveSession()) {
+      console.log('🔄 Restoring interview state after page refresh');
+
+      // Restore all state values
+      if (restoredState.interviewId) setInterviewId(restoredState.interviewId);
+      if (restoredState.interviewType) setInterviewType(restoredState.interviewType);
+      if (restoredState.isInterviewStarted) {
+        setIsInterviewStarted(restoredState.isInterviewStarted);
+        setIsGuidelinesModalOpen(false); // Skip guidelines if resuming
+      }
+      if (restoredState.interviewStartTime) setInterviewStartTime(restoredState.interviewStartTime);
+      if (restoredState.timeRemaining !== undefined) setTimeRemaining(restoredState.timeRemaining);
+      if (restoredState.currentQuestion) setCurrentQuestion(restoredState.currentQuestion);
+      if (restoredState.questionNumber) setQuestionNumber(restoredState.questionNumber);
+      if (restoredState.chatMessages) setChatMessages(restoredState.chatMessages);
+      if (restoredState.userAnswer) setUserAnswer(restoredState.userAnswer);
+      if (restoredState.warningCount !== undefined) {
+        setWarningStatus(prev => ({
+          ...prev,
+          warningCount: restoredState.warningCount || 0,
+        }));
+      }
+      if (restoredState.warningStatus) setWarningStatus(restoredState.warningStatus);
+      if (restoredState.tabSwitchCount !== undefined) setTabSwitchCount(restoredState.tabSwitchCount);
+
+      // Restore camera if it was on
+      requestCameraPermission();
+
+      console.log('✅ Interview state restored successfully');
+      toast.success('Interview resumed from where you left off');
+    }
   }, [searchParams, router]);
 
   // Timer countdown with automatic interview ending
@@ -280,17 +323,67 @@ const InterviewPage = () => {
     if (isInterviewStarted && timeRemaining > 0) {
       const timer = setInterval(() => {
         setTimeRemaining((prev) => {
-          if (prev <= 1) {
+          const newTime = prev <= 1 ? 0 : prev - 1;
+
+          // Persist time remaining every second
+          if (interviewStartTime) {
+            const timeElapsed = Math.floor((new Date().getTime() - interviewStartTime.getTime()) / 1000);
+            updateInterviewState({
+              timeElapsed,
+              timeRemaining: newTime
+            });
+          }
+
+          if (newTime === 0) {
             // Time's up! End interview automatically
             handleAutoEndInterview();
-            return 0;
           }
-          return prev - 1;
+
+          return newTime;
         });
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [isInterviewStarted, timeRemaining]);
+  }, [isInterviewStarted, timeRemaining, interviewStartTime]);
+
+  // Persist interview session data whenever it changes
+  useEffect(() => {
+    if (isInterviewStarted && interviewId) {
+      saveInterviewState({
+        interviewId,
+        interviewType,
+        isInterviewStarted,
+        interviewStartTime: interviewStartTime || new Date(),
+        timeElapsed: interviewStartTime ? Math.floor((new Date().getTime() - interviewStartTime.getTime()) / 1000) : 0,
+        timeRemaining,
+        currentQuestion,
+        questionNumber,
+        chatMessages,
+        userAnswer,
+        warningCount: warningStatus.warningCount,
+        warningStatus,
+        tabSwitchCount,
+        proctoringViolations: {
+          tabSwitches: proctoringData.tabSwitches || 0,
+          copyPasteCount: proctoringData.copyPasteCount || 0,
+          faceDetectionIssues: proctoringData.faceDetection ? 0 : 1,
+        }
+      });
+    }
+  }, [
+    isInterviewStarted,
+    interviewId,
+    interviewType,
+    interviewStartTime,
+    timeRemaining,
+    currentQuestion,
+    questionNumber,
+    chatMessages,
+    userAnswer,
+    warningStatus,
+    tabSwitchCount,
+    proctoringData
+  ]);
 
   // Close theme menu when clicking outside
   useEffect(() => {
@@ -1205,12 +1298,7 @@ const InterviewPage = () => {
 
   // Helper function to clear all interview-related localStorage data
   const clearInterviewLocalStorage = () => {
-    localStorage.removeItem("interview-terminated");
-    localStorage.removeItem("interview-termination-reason");
-    localStorage.removeItem("interview-termination-time");
-    localStorage.removeItem("interview-warning-count");
-    localStorage.removeItem("interview-last-warning");
-    localStorage.removeItem("interview-warning-seen");
+    clearInterviewState(); // Use the utility function from interview-persistence
   };
 
   const handleEndInterview = async () => {

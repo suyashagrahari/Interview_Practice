@@ -50,12 +50,21 @@ import { useAuth } from "@/contexts/auth-context";
 import { useRouter } from "next/navigation";
 import { useInterviewers } from "@/hooks/useInterviewers";
 import { ResumeApiService, InterviewApiService } from "@/lib/api";
+import {
+  getIncompleteInterview,
+  clearInterviewState,
+} from "@/lib/interview-persistence";
+import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 
 interface ResumeBasedInterviewProps {
   onBack?: () => void;
+  onStartInterview?: (formData?: any) => void;
 }
 
-const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
+const ResumeBasedInterview = ({
+  onBack,
+  onStartInterview,
+}: ResumeBasedInterviewProps) => {
   const { user } = useAuth();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +80,8 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [hasActiveInterview, setHasActiveInterview] = useState(false);
+  const [activeInterviewData, setActiveInterviewData] = useState<any>(null);
 
   // Form states - Initialize with all values as strings to prevent undefined
   const [formData, setFormData] = useState({
@@ -392,6 +403,31 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
       return;
     }
 
+    // If onStartInterview prop is provided, use it (this will check for incomplete interviews)
+    if (onStartInterview) {
+      // Prepare interview data from form
+      const interviewData = {
+        resumeId: selectedResumeId,
+        interviewType: formData.interviewType as "technical" | "behavioral",
+        level: formData.level,
+        difficultyLevel: formData.difficultyLevel as
+          | "beginner"
+          | "intermediate"
+          | "expert",
+        jobRole: formData.jobRole.trim(),
+        interviewerId: formData.interviewerId.trim(),
+        interviewer: {
+          name: formData.interviewer.name.trim(),
+          numberOfInterviewers: formData.interviewer.numberOfInterviewers,
+          experience: formData.interviewer.experience.trim(),
+          bio: formData.interviewer.bio.trim(),
+          introduction: formData.interviewer.introduction?.trim() || "",
+        },
+      };
+      onStartInterview(interviewData);
+      return;
+    }
+
     setIsStartingInterview(true);
 
     try {
@@ -524,6 +560,68 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
     }
   }, [showResumeDropdown]);
 
+  // Check for active interviews
+  useEffect(() => {
+    const checkActiveInterview = async () => {
+      try {
+        // First check server for active interview
+        const serverCheck = await interviewRealtimeApi.checkActiveInterview();
+
+        if (
+          serverCheck.success &&
+          serverCheck.hasActiveInterview &&
+          serverCheck.data
+        ) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(serverCheck.data);
+          return;
+        }
+
+        // If server explicitly says no active interview, clear everything
+        if (serverCheck.success && !serverCheck.hasActiveInterview) {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+          // Clear localStorage as well to keep it in sync
+          clearInterviewState();
+          return;
+        }
+
+        // Fallback: Check localStorage only if server check failed
+        const incomplete = getIncompleteInterview();
+        if (incomplete.hasIncomplete && incomplete.data) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(incomplete.data);
+        } else {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+        }
+      } catch (error) {
+        console.error("Error checking for active interview:", error);
+        // Fallback to localStorage check
+        const incomplete = getIncompleteInterview();
+        if (incomplete.hasIncomplete && incomplete.data) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(incomplete.data);
+        } else {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+        }
+      }
+    };
+
+    if (isClient) {
+      checkActiveInterview();
+    }
+  }, [isClient]);
+
+  // Handler to show active interview modal
+  const handleShowActiveInterviewModal = () => {
+    if (onStartInterview) {
+      // This will trigger the dashboard's incomplete interview modal
+      onStartInterview();
+    }
+  };
+
   if (!isClient) {
     return (
       <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900">
@@ -549,7 +647,7 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         className="sticky top-0 z-40 py-2 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-white/20 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto ">
           <div className="flex items-center justify-between h-14">
             {/* Left Section - Profile Type Header */}
             <div className="flex items-center space-x-3">
@@ -570,13 +668,17 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
 
             {/* Right Section - Back Button */}
             <div className="flex items-center space-x-3">
-              {/* Status Indicator */}
-              <div className="hidden md:flex items-center space-x-2 px-2 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-xs text-gray-600 dark:text-gray-300">
-                  {isInterviewStarted ? "Interview Active" : "Ready to Start"}
-                </span>
-              </div>
+              {/* Status Indicator - Only show if there's an active interview */}
+              {hasActiveInterview && (
+                <div
+                  className="hidden md:flex items-center space-x-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+                  onClick={handleShowActiveInterviewModal}>
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                    Interview in Progress
+                  </span>
+                </div>
+              )}
 
               {/* Video Controls - Only show in interview mode */}
               {isInterviewStarted && (
@@ -614,15 +716,6 @@ const ResumeBasedInterview = ({ onBack }: ResumeBasedInterviewProps) => {
                   </motion.button>
                 </div>
               )}
-
-              {/* Back Button */}
-              <motion.button
-                onClick={onBack || (() => router.back())}
-                className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}>
-                <ArrowLeft className="w-4 h-4" />
-              </motion.button>
             </div>
           </div>
         </div>

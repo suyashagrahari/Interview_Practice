@@ -174,4 +174,60 @@ export const interviewRealtimeApi = {
     const response = await apiClient.post(`/interview/${interviewId}/end`);
     return response.data;
   },
+
+  /**
+   * Check for active/incomplete interview for current user
+   * This works across devices - if user has an active interview on any device, it will be returned
+   */
+  checkActiveInterview: async (): Promise<{
+    success: boolean;
+    hasActiveInterview: boolean;
+    data: {
+      interviewId: string;
+      interviewType: string;
+      startTime: string;
+      currentQuestionNumber: number;
+      totalQuestions: number;
+      timeElapsed: number; // in seconds
+      timeRemaining: number; // in seconds
+      isExpired: boolean;
+      currentQuestion: InterviewQuestion | null;
+      chatHistory: Array<{
+        type: 'ai' | 'user';
+        message: string;
+        timestamp: string;
+      }>;
+      warningCount: number;
+      tabSwitchCount: number;
+      violations: {
+        tabSwitches: number;
+        copyPasteCount: number;
+      };
+    } | null;
+  }> => {
+    const response = await apiClient.get('/interview/check-active');
+    return response.data;
+  },
+
+  /**
+   * Resume an active interview from any device
+   * Returns complete interview state to restore on client
+   */
+  resumeInterview: async (interviewId: string): Promise<{
+    success: boolean;
+    data: {
+      interviewId: string;
+      interviewType: string;
+      startTime: string;
+      currentQuestionNumber: number;
+      currentQuestion: InterviewQuestion;
+      chatHistory: Array<any>;
+      timeRemaining: number;
+      warningCount: number;
+      violations: any;
+    };
+  }> => {
+    const response = await apiClient.get(`/interview/resume/${interviewId}`);
+    return response.data;
+  },
 };

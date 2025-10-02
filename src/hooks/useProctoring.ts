@@ -24,23 +24,64 @@ interface UseProctoringReturn {
 }
 
 export const useProctoring = (): UseProctoringReturn => {
-  const [proctoringData, setProctoringData] = useState<ProctoringData>({
-    tabSwitches: 0,
-    copyPasteCount: 0,
-    faceDetection: false,
-    mobileDetection: false,
-    laptopDetection: false,
-    zoomIn: false,
-    zoomOut: false,
-    startTime: null,
-    endTime: null,
-    timeSpent: 0,
-  });
+  // Try to restore proctoring violations from localStorage on mount
+  const getInitialProctoringData = (): ProctoringData => {
+    if (typeof window === 'undefined') {
+      return {
+        tabSwitches: 0,
+        copyPasteCount: 0,
+        faceDetection: false,
+        mobileDetection: false,
+        laptopDetection: false,
+        zoomIn: false,
+        zoomOut: false,
+        startTime: null,
+        endTime: null,
+        timeSpent: 0,
+      };
+    }
+
+    try {
+      const storedViolations = localStorage.getItem('interview-proctoring-violations');
+      if (storedViolations) {
+        const violations = JSON.parse(storedViolations);
+        return {
+          tabSwitches: violations.tabSwitches || 0,
+          copyPasteCount: violations.copyPasteCount || 0,
+          faceDetection: false,
+          mobileDetection: false,
+          laptopDetection: false,
+          zoomIn: false,
+          zoomOut: false,
+          startTime: null,
+          endTime: null,
+          timeSpent: 0,
+        };
+      }
+    } catch (error) {
+      console.error('Failed to restore proctoring data:', error);
+    }
+
+    return {
+      tabSwitches: 0,
+      copyPasteCount: 0,
+      faceDetection: false,
+      mobileDetection: false,
+      laptopDetection: false,
+      zoomIn: false,
+      zoomOut: false,
+      startTime: null,
+      endTime: null,
+      timeSpent: 0,
+    };
+  };
+
+  const [proctoringData, setProctoringData] = useState<ProctoringData>(getInitialProctoringData);
 
   const [isProctoring, setIsProctoring] = useState(false);
   const startTimeRef = useRef<Date | null>(null);
-  const tabSwitchCountRef = useRef(0);
-  const copyPasteCountRef = useRef(0);
+  const tabSwitchCountRef = useRef(proctoringData.tabSwitches);
+  const copyPasteCountRef = useRef(proctoringData.copyPasteCount);
   const lastFocusTimeRef = useRef<Date | null>(null);
 
   // Detect tab switches
