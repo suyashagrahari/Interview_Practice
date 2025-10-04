@@ -62,9 +62,14 @@ export interface ProctoringViolations {
  */
 export const saveInterviewState = (state: Partial<InterviewSessionState>): void => {
   try {
-    if (state.interviewId) {
-      localStorage.setItem(STORAGE_KEYS.INTERVIEW_ID, state.interviewId);
+    // Only save if we have essential data
+    if (!state.interviewId) {
+      console.warn('⚠️ Cannot save interview state: missing interviewId');
+      return;
     }
+
+    // Save all state properties
+    localStorage.setItem(STORAGE_KEYS.INTERVIEW_ID, state.interviewId);
 
     if (state.interviewType) {
       localStorage.setItem('interview-type', state.interviewType);
@@ -117,9 +122,38 @@ export const saveInterviewState = (state: Partial<InterviewSessionState>): void 
     // Update last modification timestamp
     localStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
 
-    console.log('💾 Interview state saved to localStorage');
+    // Only log every 10th save to reduce console spam
+    const saveCount = parseInt(localStorage.getItem('save-count') || '0', 10) + 1;
+    localStorage.setItem('save-count', saveCount.toString());
+    
+    if (saveCount % 10 === 0 || saveCount <= 5) {
+      console.log(`💾 Interview state saved`, {
+        saveCount,
+        interviewId: state.interviewId,
+        questionNumber: state.questionNumber,
+        timeRemaining: state.timeRemaining,
+        userAnswerLength: state.userAnswer?.length || 0,
+        chatMessagesCount: state.chatMessages?.length || 0,
+      });
+    }
   } catch (error) {
     console.error('❌ Failed to save interview state:', error);
+    
+    // If localStorage is full, try to clear some old data
+    if (error instanceof DOMException && error.code === 22) {
+      console.log('🧹 localStorage is full, attempting cleanup...');
+      try {
+        // Clear old save count data
+        localStorage.removeItem('save-count');
+        // Try saving again with minimal data
+        localStorage.setItem(STORAGE_KEYS.INTERVIEW_ID, state.interviewId || '');
+        localStorage.setItem(STORAGE_KEYS.SESSION_ACTIVE, 'true');
+        localStorage.setItem(STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
+        console.log('✅ Emergency save completed');
+      } catch (cleanupError) {
+        console.error('❌ Emergency save failed:', cleanupError);
+      }
+    }
   }
 };
 
@@ -217,6 +251,7 @@ export const clearInterviewState = (): void => {
     localStorage.removeItem('interview-termination-time');
     localStorage.removeItem('interview-last-warning');
     localStorage.removeItem('interview-warning-seen');
+    localStorage.removeItem('save-count');
 
     console.log('🗑️ Interview state cleared from localStorage');
   } catch (error) {

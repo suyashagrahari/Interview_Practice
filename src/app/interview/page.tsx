@@ -40,6 +40,7 @@ import InterviewGuidelinesModal from "@/components/interview/interview-guideline
 import StreamingText from "@/components/ui/streaming-text";
 import { useImprovedSpeechRecognition } from "@/hooks/useImprovedSpeechRecognition";
 import { useProctoring } from "@/hooks/useProctoring";
+import { useComputerVision } from "@/hooks/useComputerVision";
 import { isAuthenticated, getAuthTokens } from "@/lib/cookies";
 import { toast } from "@/utils/toast";
 import {
@@ -253,6 +254,162 @@ const InterviewPage = () => {
     resetProctoring,
     isProctoring,
   } = useProctoring();
+
+  // Computer Vision Detection
+  const {
+    stats: cvStats,
+    isModelLoaded: isCVModelLoaded,
+    isVideoReady: isCVVideoReady,
+    isLoading: isCVLoading,
+    initializeComputerVision,
+    cleanup: cleanupComputerVision,
+  } = useComputerVision();
+
+  // Track if computer vision has been initialized to prevent multiple calls
+  const cvInitializedRef = useRef<boolean>(false);
+
+  // Store computer vision violations in state (not localStorage)
+  const [cvViolations, setCvViolations] = useState({
+    multiplePersonIncidents: 0,
+    phoneDetections: 0,
+    totalViolations: 0,
+    violations: [] as Array<{
+      type: string;
+      timestamp: Date;
+      count: number;
+    }>,
+  });
+
+  // Persistent cheating detection status for this interview
+  const [persistentCheatingDetected, setPersistentCheatingDetected] =
+    useState(false);
+
+  // Check for existing cheating detection status when interview loads
+  useEffect(() => {
+    if (interviewId) {
+      const savedCheatingStatus = localStorage.getItem(
+        `cheating-detected-${interviewId}`
+      );
+      if (savedCheatingStatus === "true") {
+        setPersistentCheatingDetected(true);
+        console.log(
+          `[PROCTORING] Cheating detection status restored for interview ${interviewId}`
+        );
+      }
+    }
+  }, [interviewId]);
+
+  // Store all CV detection points for console display
+  const [cvDetectionPoints, setCvDetectionPoints] = useState<
+    Array<{
+      timestamp: Date;
+      peopleCount: number;
+      phoneCount: number;
+      violation: boolean;
+      violationType?: string;
+    }>
+  >([]);
+
+  // Update computer vision violations in state when detected (simplified to prevent loops)
+  useEffect(() => {
+    // Only update if there are actual violations and they're new
+    if (
+      cvStats.multiplePersonIncidents > 0 &&
+      cvStats.multiplePersonIncidents !== cvViolations.multiplePersonIncidents
+    ) {
+      setCvViolations((prev) => ({
+        ...prev,
+        multiplePersonIncidents: cvStats.multiplePersonIncidents,
+        totalViolations: prev.totalViolations + 1,
+        violations: [
+          ...prev.violations,
+          {
+            type: "MULTIPLE_PEOPLE",
+            timestamp: new Date(),
+            count: cvStats.currentPeople,
+          },
+        ],
+      }));
+    }
+
+    if (
+      cvStats.phoneDetections > 0 &&
+      cvStats.phoneDetections !== cvViolations.phoneDetections
+    ) {
+      setCvViolations((prev) => ({
+        ...prev,
+        phoneDetections: cvStats.phoneDetections,
+        totalViolations: prev.totalViolations + 1,
+        violations: [
+          ...prev.violations,
+          {
+            type: "PHONE_DETECTED",
+            timestamp: new Date(),
+            count: cvStats.currentPhones,
+          },
+        ],
+      }));
+    }
+  }, [cvStats.multiplePersonIncidents, cvStats.phoneDetections]);
+
+  // Store all CV detection points continuously
+  useEffect(() => {
+    if (isInterviewStarted && isCVModelLoaded) {
+      const hasViolation =
+        cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
+      let violationType = "";
+
+      if (cvStats.currentPeople > 1 && cvStats.currentPhones > 0) {
+        violationType = "MULTIPLE_PEOPLE_AND_DEVICES";
+      } else if (cvStats.currentPeople > 1) {
+        violationType = "MULTIPLE_PEOPLE";
+      } else if (cvStats.currentPhones > 0) {
+        violationType = "MOBILE_DEVICE";
+      }
+
+      const detectionPoint = {
+        timestamp: new Date(),
+        peopleCount: cvStats.currentPeople,
+        phoneCount: cvStats.currentPhones,
+        violation: hasViolation,
+        violationType: hasViolation ? violationType : undefined,
+      };
+
+      setCvDetectionPoints((prev) => {
+        // Keep only last 100 detection points to prevent memory issues
+        const newPoints = [...prev, detectionPoint];
+        return newPoints.slice(-100);
+      });
+    }
+  }, [
+    cvStats.currentPeople,
+    cvStats.currentPhones,
+    isInterviewStarted,
+    isCVModelLoaded,
+  ]);
+
+  // Update persistent cheating status when cheating is detected
+  useEffect(() => {
+    if (isInterviewStarted && interviewId) {
+      const currentCheatingDetected =
+        cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
+
+      if (currentCheatingDetected && !persistentCheatingDetected) {
+        setPersistentCheatingDetected(true);
+        localStorage.setItem(`cheating-detected-${interviewId}`, "true");
+        console.log(
+          `[PROCTORING] Cheating detected and saved for interview ${interviewId}`
+        );
+      }
+    }
+  }, [
+    cvStats.currentPeople,
+    cvStats.currentPhones,
+    isInterviewStarted,
+    interviewId,
+    persistentCheatingDetected,
+  ]);
+
   // Ref for question section scrolling
   const questionSectionRef = useRef<HTMLDivElement>(null);
   const chatMessagesRef = useRef<HTMLDivElement>(null);
@@ -286,35 +443,73 @@ const InterviewPage = () => {
     // Try to restore previous interview state if page was refreshed
     const restoredState = restoreInterviewState();
     if (restoredState && hasActiveSession()) {
-      console.log('🔄 Restoring interview state after page refresh');
+      console.log("🔄 Restoring interview state after page refresh");
+
+      // Check if interview has expired (45 minutes)
+      const timeRemaining = restoredState.timeRemaining || 0;
+      if (timeRemaining <= 0) {
+        console.log("⏰ Interview session expired, clearing state");
+        clearInterviewState();
+        toast.error(
+          "Interview session has expired. Please start a new interview."
+        );
+        return;
+      }
 
       // Restore all state values
       if (restoredState.interviewId) setInterviewId(restoredState.interviewId);
-      if (restoredState.interviewType) setInterviewType(restoredState.interviewType);
+      if (restoredState.interviewType)
+        setInterviewType(restoredState.interviewType);
       if (restoredState.isInterviewStarted) {
         setIsInterviewStarted(restoredState.isInterviewStarted);
         setIsGuidelinesModalOpen(false); // Skip guidelines if resuming
       }
-      if (restoredState.interviewStartTime) setInterviewStartTime(restoredState.interviewStartTime);
-      if (restoredState.timeRemaining !== undefined) setTimeRemaining(restoredState.timeRemaining);
-      if (restoredState.currentQuestion) setCurrentQuestion(restoredState.currentQuestion);
-      if (restoredState.questionNumber) setQuestionNumber(restoredState.questionNumber);
-      if (restoredState.chatMessages) setChatMessages(restoredState.chatMessages);
+      if (restoredState.interviewStartTime)
+        setInterviewStartTime(restoredState.interviewStartTime);
+      if (restoredState.timeRemaining !== undefined)
+        setTimeRemaining(restoredState.timeRemaining);
+      if (restoredState.currentQuestion)
+        setCurrentQuestion(restoredState.currentQuestion);
+      if (restoredState.questionNumber)
+        setQuestionNumber(restoredState.questionNumber);
+      if (restoredState.chatMessages)
+        setChatMessages(restoredState.chatMessages);
       if (restoredState.userAnswer) setUserAnswer(restoredState.userAnswer);
       if (restoredState.warningCount !== undefined) {
-        setWarningStatus(prev => ({
+        setWarningStatus((prev) => ({
           ...prev,
           warningCount: restoredState.warningCount || 0,
         }));
       }
-      if (restoredState.warningStatus) setWarningStatus(restoredState.warningStatus);
-      if (restoredState.tabSwitchCount !== undefined) setTabSwitchCount(restoredState.tabSwitchCount);
+      if (restoredState.warningStatus)
+        setWarningStatus(restoredState.warningStatus);
+      if (restoredState.tabSwitchCount !== undefined)
+        setTabSwitchCount(restoredState.tabSwitchCount);
 
       // Restore camera if it was on
       requestCameraPermission();
 
-      console.log('✅ Interview state restored successfully');
-      toast.success('Interview resumed from where you left off');
+      console.log("✅ Interview state restored successfully", {
+        questionNumber: restoredState.questionNumber,
+        timeRemaining: restoredState.timeRemaining,
+        hasCurrentQuestion: !!restoredState.currentQuestion,
+        chatMessagesCount: restoredState.chatMessages?.length || 0,
+        userAnswerLength: restoredState.userAnswer?.length || 0,
+      });
+      toast.success(
+        `Interview resumed from question ${
+          restoredState.questionNumber
+        }. Time remaining: ${Math.floor(
+          (restoredState.timeRemaining || 0) / 60
+        )} minutes`
+      );
+    } else {
+      // Check if there's any incomplete interview data that might need cleanup
+      const incompleteData = localStorage.getItem("current-interview-id");
+      if (incompleteData) {
+        console.log("🧹 Cleaning up incomplete interview data");
+        clearInterviewState();
+      }
     }
   }, [searchParams, router]);
 
@@ -325,17 +520,10 @@ const InterviewPage = () => {
         setTimeRemaining((prev) => {
           const newTime = prev <= 1 ? 0 : prev - 1;
 
-          // Persist time remaining every second
-          if (interviewStartTime) {
-            const timeElapsed = Math.floor((new Date().getTime() - interviewStartTime.getTime()) / 1000);
-            updateInterviewState({
-              timeElapsed,
-              timeRemaining: newTime
-            });
-          }
-
           if (newTime === 0) {
             // Time's up! End interview automatically
+            console.log("⏰ Time's up! Automatically ending interview...");
+            toast.info("Time's up! Interview ending automatically...");
             handleAutoEndInterview();
           }
 
@@ -346,15 +534,19 @@ const InterviewPage = () => {
     }
   }, [isInterviewStarted, timeRemaining, interviewStartTime]);
 
-  // Persist interview session data whenever it changes
-  useEffect(() => {
+  // Manual save function - only call when needed
+  const saveCurrentState = useCallback(() => {
     if (isInterviewStarted && interviewId) {
       saveInterviewState({
         interviewId,
         interviewType,
         isInterviewStarted,
         interviewStartTime: interviewStartTime || new Date(),
-        timeElapsed: interviewStartTime ? Math.floor((new Date().getTime() - interviewStartTime.getTime()) / 1000) : 0,
+        timeElapsed: interviewStartTime
+          ? Math.floor(
+              (new Date().getTime() - interviewStartTime.getTime()) / 1000
+            )
+          : 0,
         timeRemaining,
         currentQuestion,
         questionNumber,
@@ -366,8 +558,9 @@ const InterviewPage = () => {
         proctoringViolations: {
           tabSwitches: proctoringData.tabSwitches || 0,
           copyPasteCount: proctoringData.copyPasteCount || 0,
-          faceDetectionIssues: proctoringData.faceDetection ? 0 : 1,
-        }
+          faceDetectionIssues:
+            cvViolations.multiplePersonIncidents + cvViolations.phoneDetections,
+        },
       });
     }
   }, [
@@ -382,8 +575,78 @@ const InterviewPage = () => {
     userAnswer,
     warningStatus,
     tabSwitchCount,
-    proctoringData
+    cvViolations,
   ]);
+
+  // Debounced auto-save function
+  const debouncedSaveRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveState = useCallback(() => {
+    if (debouncedSaveRef.current) {
+      clearTimeout(debouncedSaveRef.current);
+    }
+    debouncedSaveRef.current = setTimeout(() => {
+      saveCurrentState();
+    }, 1000); // Save after 1 second of inactivity
+  }, [saveCurrentState]);
+
+  // Auto-save when critical state changes
+  useEffect(() => {
+    if (isInterviewStarted && interviewId) {
+      autoSaveState();
+    }
+  }, [
+    userAnswer,
+    currentQuestion,
+    questionNumber,
+    chatMessages,
+    timeRemaining,
+    warningStatus.warningCount,
+    tabSwitchCount,
+    autoSaveState,
+    isInterviewStarted,
+    interviewId,
+  ]);
+
+  // Save state on page unload
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isInterviewStarted && interviewId) {
+        // Save state immediately before page unload
+        saveCurrentState();
+
+        // Optional: Show confirmation dialog
+        const message =
+          "Your interview progress will be saved. Are you sure you want to leave?";
+        e.preventDefault();
+        e.returnValue = message;
+        return message;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (
+        document.visibilityState === "hidden" &&
+        isInterviewStarted &&
+        interviewId
+      ) {
+        // Save state when tab becomes hidden
+        saveCurrentState();
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+
+      // Clear debounced save on cleanup
+      if (debouncedSaveRef.current) {
+        clearTimeout(debouncedSaveRef.current);
+      }
+    };
+  }, [saveCurrentState, isInterviewStarted, interviewId]);
 
   // Close theme menu when clicking outside
   useEffect(() => {
@@ -402,14 +665,16 @@ const InterviewPage = () => {
     };
   }, [showThemeMenu]);
 
-  // Cleanup camera stream on unmount
+  // Cleanup camera stream and computer vision on unmount
   useEffect(() => {
     return () => {
       if (cameraStream) {
         cameraStream.getTracks().forEach((track) => track.stop());
       }
+      cleanupComputerVision();
+      cvInitializedRef.current = false; // Reset initialization flag
     };
-  }, [cameraStream]);
+  }, [cameraStream, cleanupComputerVision]);
 
   // Cleanup speech recognition on unmount
   useEffect(() => {
@@ -491,13 +756,26 @@ const InterviewPage = () => {
         safeVideoPlay(videoRef.current);
       }
 
+      // Initialize computer vision when video is ready (only once)
+      if (videoRef.current && isCVModelLoaded && !cvInitializedRef.current) {
+        console.log("🔍 Initializing computer vision detection");
+        initializeComputerVision(videoRef.current);
+        cvInitializedRef.current = true;
+      }
+
       // Ensure video is on when we have a stream
       if (!isVideoOn) {
         console.log("🎥 Auto-enabling video since we have camera stream");
         setIsVideoOn(true);
       }
     }
-  }, [cameraStream, isVideoOn, safeVideoPlay]);
+  }, [
+    cameraStream,
+    isVideoOn,
+    safeVideoPlay,
+    isCVModelLoaded,
+    initializeComputerVision,
+  ]);
 
   // Additional effect to ensure video is displayed when interview starts
   useEffect(() => {
@@ -508,8 +786,21 @@ const InterviewPage = () => {
       videoRef.current.srcObject = cameraStream;
       setIsVideoOn(true);
       safeVideoPlay(videoRef.current);
+
+      // Initialize computer vision if not already done
+      if (isCVModelLoaded && !cvInitializedRef.current) {
+        console.log("🔍 Initializing computer vision for interview");
+        initializeComputerVision(videoRef.current);
+        cvInitializedRef.current = true;
+      }
     }
-  }, [isInterviewStarted, cameraStream, safeVideoPlay]);
+  }, [
+    isInterviewStarted,
+    cameraStream,
+    safeVideoPlay,
+    isCVModelLoaded,
+    initializeComputerVision,
+  ]);
 
   // Handle speech recognition updates
   useEffect(() => {
@@ -538,14 +829,24 @@ const InterviewPage = () => {
     }
   }, [speechError]);
 
-  // Auto-end interview function
+  // Auto-end interview function (called when time expires or 18 questions reached)
   const handleAutoEndInterview = async () => {
+    console.log(
+      "⏰ Auto-ending interview (time expired or 18 questions reached)"
+    );
+
     if (interviewId) {
       try {
         await interviewRealtimeApi.endInterview(interviewId);
 
         // Clear all interview-related localStorage data
         clearInterviewLocalStorage();
+
+        // Stop proctoring
+        stopProctoring();
+
+        // Show success message
+        toast.success("Interview completed successfully!");
 
         // Redirect to dashboard with completion status
         router.push("/dashboard?interviewCompleted=true");
@@ -555,12 +856,18 @@ const InterviewPage = () => {
         // Clear localStorage even if API call fails
         clearInterviewLocalStorage();
 
+        // Stop proctoring
+        stopProctoring();
+
         // Still redirect even if there's an error
         router.push("/dashboard?interviewCompleted=true");
       }
     } else {
       // Clear localStorage even if no interview ID
       clearInterviewLocalStorage();
+
+      // Stop proctoring
+      stopProctoring();
 
       // Redirect to dashboard even if no interview ID
       router.push("/dashboard?interviewCompleted=true");
@@ -670,6 +977,11 @@ const InterviewPage = () => {
 
     // Start the real interview process
     await startRealInterview();
+
+    // Save state when interview starts
+    setTimeout(() => {
+      saveCurrentState();
+    }, 1000); // Small delay to ensure all state is set
   };
 
   const handleInitialWarningComplete = async () => {
@@ -756,6 +1068,9 @@ const InterviewPage = () => {
         // Start proctoring
         startProctoring();
         console.log("✅ First question generated and streaming started");
+
+        // Save state after first question is generated
+        saveCurrentState();
       } else {
         throw new Error(
           response.message || "Failed to generate first question"
@@ -938,6 +1253,9 @@ const InterviewPage = () => {
               setPendingNextQuestion(responseData.nextQuestion);
             }
 
+            // Save state when warning is issued
+            saveCurrentState();
+
             // If interview is terminated, call endInterview API and show termination modal
             if (interviewTerminated) {
               // Call endInterview API to properly cancel the interview in backend
@@ -977,9 +1295,24 @@ const InterviewPage = () => {
             setAnswerAnalysis(responseData.analysis);
           }
 
+          // Save state after answer submission
+          saveCurrentState();
+
           // Check if interview can continue
           if (!canContinue) {
             setIsInterviewStarted(false);
+            return;
+          }
+
+          // Check if interview is complete (18 questions reached)
+          if (
+            responseData.isInterviewComplete ||
+            responseData.totalQuestionsAsked >= 18
+          ) {
+            console.log("🎯 Interview complete: All 18 questions asked");
+
+            // Automatically end the interview
+            await handleEndInterview();
             return;
           }
 
@@ -1006,9 +1339,13 @@ const InterviewPage = () => {
             // Reset proctoring for next question
             resetProctoring();
             startProctoring();
+
+            // Save state after moving to next question
+            saveCurrentState();
           } else if (!responseData.nextQuestion && !warningIssued) {
-            // Interview completed
-            setIsInterviewStarted(false);
+            // Interview completed - auto end
+            console.log("🎯 Interview complete: No more questions");
+            await handleEndInterview();
           }
         } catch (error) {
           console.error("Error processing response:", error);
@@ -1296,9 +1633,79 @@ const InterviewPage = () => {
     }
   };
 
+  // Function to display all CV detection points in console
+  const displayCVDetectionPoints = () => {
+    console.log("🔍 === COMPUTER VISION DETECTION POINTS ===");
+    console.log(`📊 Total Detection Points: ${cvDetectionPoints.length}`);
+
+    if (cvDetectionPoints.length === 0) {
+      console.log("No detection points recorded yet.");
+      return;
+    }
+
+    // Group by violation type
+    const violations = cvDetectionPoints.filter((point) => point.violation);
+    const normal = cvDetectionPoints.filter((point) => !point.violation);
+
+    console.log(`✅ Normal Detections: ${normal.length}`);
+    console.log(`⚠️ Violation Detections: ${violations.length}`);
+
+    if (violations.length > 0) {
+      console.log("\n🚨 VIOLATION DETECTIONS:");
+      violations.forEach((point, index) => {
+        console.log(
+          `${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${
+            point.violationType
+          }`
+        );
+        console.log(
+          `   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`
+        );
+      });
+    }
+
+    // Show recent detections (last 10)
+    console.log("\n📈 RECENT DETECTIONS (Last 10):");
+    const recentPoints = cvDetectionPoints.slice(-10);
+    recentPoints.forEach((point, index) => {
+      const status = point.violation ? "🚨 VIOLATION" : "✅ NORMAL";
+      console.log(
+        `${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${status}`
+      );
+      console.log(
+        `   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`
+      );
+      if (point.violationType) {
+        console.log(`   - Type: ${point.violationType}`);
+      }
+    });
+
+    console.log("🔍 === END DETECTION POINTS ===");
+  };
+
   // Helper function to clear all interview-related localStorage data
   const clearInterviewLocalStorage = () => {
     clearInterviewState(); // Use the utility function from interview-persistence
+    cvInitializedRef.current = false; // Reset computer vision initialization flag
+
+    // Clear persistent cheating status for this interview
+    if (interviewId) {
+      localStorage.removeItem(`cheating-detected-${interviewId}`);
+    }
+
+    // Reset computer vision violations
+    setCvViolations({
+      multiplePersonIncidents: 0,
+      phoneDetections: 0,
+      totalViolations: 0,
+      violations: [],
+    });
+
+    // Reset detection points
+    setCvDetectionPoints([]);
+
+    // Reset persistent cheating status
+    setPersistentCheatingDetected(false);
   };
 
   const handleEndInterview = async () => {
@@ -1652,34 +2059,98 @@ const InterviewPage = () => {
             ? "bg-slate-800/90 backdrop-blur-sm border-slate-700"
             : "bg-white/90 backdrop-blur-sm border-slate-200"
         }`}>
-        {/* Left Side - AI Profile, Name, and Interview Info */}
-        <div className="flex items-center space-x-4 flex-1">
-          {/* AI Profile Image */}
-          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white shadow-lg">
-            <Image
-              src={AiImage}
-              alt="AI Interviewer"
-              width={48}
-              height={48}
-              className="w-full h-full object-cover"
-            />
-          </div>
+        {/* Left Side - Alert & Warning Status Indicators */}
+        <div className="flex items-center space-x-3 flex-1">
+          {/* Proctoring Status */}
 
-          {/* AI Name and Interview Info */}
-          <div>
-            <h2
-              className={`text-lg font-semibold ${
-                isDarkMode ? "text-white" : "text-slate-900"
+          {/* Tab Switch Monitor */}
+          {isInterviewStarted && (
+            <div
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                tabSwitchCount > 0
+                  ? isDarkMode
+                    ? "bg-yellow-900/30 border border-yellow-700"
+                    : "bg-yellow-50 border border-yellow-200"
+                  : isDarkMode
+                  ? "bg-green-900/30 border border-green-700"
+                  : "bg-green-50 border border-green-200"
               }`}>
-              Samantha Lee
-            </h2>
-            <p
-              className={`text-sm ${
-                isDarkMode ? "text-slate-400" : "text-slate-600"
-              }`}>
-              Total Interviews Taken: 12
-            </p>
-          </div>
+              <AlertTriangle
+                className={`w-4 h-4 animate-pulse ${
+                  tabSwitchCount > 0 ? "text-yellow-500" : "text-green-500"
+                }`}
+              />
+              <div className="flex items-center space-x-1">
+                <span
+                  className={`text-xs ${
+                    tabSwitchCount > 0 ? "text-yellow-400" : "text-green-400"
+                  }`}>
+                  Tabs Switches :
+                </span>
+                <span
+                  className={`text-sm font-bold ${
+                    tabSwitchCount > 0 ? "text-yellow-500" : "text-green-500"
+                  }`}>
+                  {tabSwitchCount}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Computer Vision Loading Indicator */}
+          {isInterviewStarted && isCVLoading && (
+            <div className="flex items-center space-x-2 px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200">
+              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="flex flex-col">
+                <span className="text-xs text-blue-400 font-light tracking-tight">
+                  Proctoring
+                </span>
+                <span className="text-xs font-light text-blue-500">
+                  Initializing...
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Professional Cheating Detection Monitor */}
+          {isInterviewStarted && isCVModelLoaded && !isCVLoading && (
+            <div
+              onClick={displayCVDetectionPoints}
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-300 cursor-pointer hover:scale-105 ${
+                persistentCheatingDetected
+                  ? isDarkMode
+                    ? "bg-red-900/30 border border-red-700"
+                    : "bg-red-50 border border-red-200"
+                  : isDarkMode
+                  ? "bg-green-900/30 border border-green-700"
+                  : "bg-green-50 border border-green-200"
+              }`}
+              title="Click to view all CV detection points in console">
+              {persistentCheatingDetected ? (
+                <div className="flex items-center space-x-2">
+                  <AlertTriangle className="w-4 h-4 text-red-500 animate-pulse" />
+                  <div className="flex items-center space-x-1">
+                    <span className="text-xs text-red-400">Cheating :</span>
+                    <span className="text-sm font-bold text-red-500">
+                      Detected
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-2">
+                  <div className="w-4 h-4 rounded-full bg-green-500 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-white rounded-full"></div>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className="text-xs text-green-400">Proctoring :</span>
+                    <span className="text-sm font-bold text-green-500">
+                      Normal
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Middle Section - User Details */}
@@ -1785,12 +2256,6 @@ const InterviewPage = () => {
                 }`}>
                 {formatTime(timeRemaining)}
               </div>
-              {/* <div
-              className={`text-xs ${
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-              }`}>
-                Time
-              </div> */}
             </div>
           </div>
 
@@ -1829,40 +2294,6 @@ const InterviewPage = () => {
                       : "text-red-500"
                   }`}>
                   {warningStatus.warningCount}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Tab Switch Monitor */}
-          {isInterviewStarted && (
-            <div
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
-                tabSwitchCount > 0
-                  ? isDarkMode
-                    ? "bg-yellow-900/30 border border-yellow-700"
-                    : "bg-yellow-50 border border-yellow-200"
-                  : isDarkMode
-                  ? "bg-green-900/30 border border-green-700"
-                  : "bg-green-50 border border-green-200"
-              }`}>
-              <AlertTriangle
-                className={`w-4 h-4 ${
-                  tabSwitchCount > 0 ? "text-yellow-500" : "text-green-500"
-                }`}
-              />
-              <div className="flex items-center space-x-1">
-                <span
-                  className={`text-xs ${
-                    tabSwitchCount > 0 ? "text-yellow-400" : "text-green-400"
-                  }`}>
-                  Tabs Swtiches :
-                </span>
-                <span
-                  className={`text-sm font-bold ${
-                    tabSwitchCount > 0 ? "text-yellow-500" : "text-green-500"
-                  }`}>
-                  {tabSwitchCount}
                 </span>
               </div>
             </div>
@@ -2111,6 +2542,51 @@ const InterviewPage = () => {
                       <span className="text-white text-xs bg-red-500 px-2 py-1 rounded">
                         REC
                       </span>
+                    </div>
+                  )}
+
+                  {/* Transparent Interviewer Info Overlay */}
+                  {isInterviewStarted && (
+                    <div className="absolute top-4 left-4 flex items-center space-x-3 bg-black/20 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl border border-white/10">
+                      {/* AI Profile Image */}
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20">
+                        <Image
+                          src={AiImage}
+                          alt="AI Interviewer"
+                          width={32}
+                          height={32}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Interviewer Info */}
+                      <div className="text-white">
+                        <div className="text-sm font-medium">Samantha Lee</div>
+                        <div className="text-xs opacity-80">
+                          Total Interviews: 12
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Floating Alert Panel - Top Right */}
+                  {isInterviewStarted && warningStatus.warningCount > 0 && (
+                    <div className="absolute top-4 right-4 flex flex-col space-y-2">
+                      {/* Warning Alert */}
+                      <motion.div
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        className="flex items-center space-x-2 bg-orange-500/95 backdrop-blur-sm px-4 py-2 rounded-xl shadow-xl border border-orange-400/30">
+                        <AlertTriangle className="w-5 h-5 text-white" />
+                        <div className="text-white">
+                          <div className="text-sm font-bold">
+                            WARNING ISSUED
+                          </div>
+                          <div className="text-xs opacity-90">
+                            Count: {warningStatus.warningCount}
+                          </div>
+                        </div>
+                      </motion.div>
                     </div>
                   )}
 
