@@ -20,48 +20,13 @@ interface UseProctoringReturn {
   startProctoring: () => void;
   stopProctoring: () => void;
   resetProctoring: () => void;
+  setProctoringData: (data: Partial<ProctoringData>) => void;
   isProctoring: boolean;
 }
 
 export const useProctoring = (): UseProctoringReturn => {
-  // Try to restore proctoring violations from localStorage on mount
+  // Initialize with zeros - backend will provide actual values
   const getInitialProctoringData = (): ProctoringData => {
-    if (typeof window === 'undefined') {
-      return {
-        tabSwitches: 0,
-        copyPasteCount: 0,
-        faceDetection: false,
-        mobileDetection: false,
-        laptopDetection: false,
-        zoomIn: false,
-        zoomOut: false,
-        startTime: null,
-        endTime: null,
-        timeSpent: 0,
-      };
-    }
-
-    try {
-      const storedViolations = localStorage.getItem('interview-proctoring-violations');
-      if (storedViolations) {
-        const violations = JSON.parse(storedViolations);
-        return {
-          tabSwitches: violations.tabSwitches || 0,
-          copyPasteCount: violations.copyPasteCount || 0,
-          faceDetection: false,
-          mobileDetection: false,
-          laptopDetection: false,
-          zoomIn: false,
-          zoomOut: false,
-          startTime: null,
-          endTime: null,
-          timeSpent: 0,
-        };
-      }
-    } catch (error) {
-      console.error('Failed to restore proctoring data:', error);
-    }
-
     return {
       tabSwitches: 0,
       copyPasteCount: 0,
@@ -80,8 +45,8 @@ export const useProctoring = (): UseProctoringReturn => {
 
   const [isProctoring, setIsProctoring] = useState(false);
   const startTimeRef = useRef<Date | null>(null);
-  const tabSwitchCountRef = useRef(proctoringData.tabSwitches);
-  const copyPasteCountRef = useRef(proctoringData.copyPasteCount);
+  const tabSwitchCountRef = useRef(0);
+  const copyPasteCountRef = useRef(0);
   const lastFocusTimeRef = useRef<Date | null>(null);
 
   // Detect tab switches
@@ -146,21 +111,19 @@ export const useProctoring = (): UseProctoringReturn => {
     setIsProctoring(true);
     startTimeRef.current = new Date();
     lastFocusTimeRef.current = new Date();
-    
+
+    // Don't reset tab switches and copy/paste count - preserve values from backend
     setProctoringData(prev => ({
       ...prev,
       startTime: startTimeRef.current,
-      tabSwitches: 0,
-      copyPasteCount: 0,
     }));
 
-    // Reset counters
-    tabSwitchCountRef.current = 0;
-    copyPasteCountRef.current = 0;
+    // Don't reset counters - they should already be set from backend data
+    // tabSwitchCountRef and copyPasteCountRef maintain their values
 
     // Detect device type
     detectDevice();
-    
+
     // Simulate face detection
     simulateFaceDetection();
   }, [detectDevice, simulateFaceDetection]);
@@ -239,11 +202,30 @@ export const useProctoring = (): UseProctoringReturn => {
     }
   }, [isProctoring]);
 
+  // Method to update proctoring data from external source (e.g., backend)
+  const updateProctoringData = useCallback((updates: Partial<ProctoringData>) => {
+    setProctoringData(prev => {
+      const updated = { ...prev, ...updates };
+
+      // Update refs as well
+      if (updates.tabSwitches !== undefined) {
+        tabSwitchCountRef.current = updates.tabSwitches;
+      }
+      if (updates.copyPasteCount !== undefined) {
+        copyPasteCountRef.current = updates.copyPasteCount;
+      }
+
+      console.log('📊 Proctoring data updated from external source:', updated);
+      return updated;
+    });
+  }, []);
+
   return {
     proctoringData,
     startProctoring,
     stopProctoring,
     resetProctoring,
+    setProctoringData: updateProctoringData,
     isProctoring,
   };
 };

@@ -54,6 +54,7 @@ import {
 import WarningModal from "@/components/interview/warning-modal";
 import InitialWarningModal from "@/components/interview/initial-warning-modal";
 import { useTheme } from "@/contexts/theme-context";
+import { useAuth } from "@/contexts/auth-context";
 import Image from "next/image";
 import {
   saveInterviewState,
@@ -64,10 +65,12 @@ import {
   updateProctoringViolations,
   calculateTimeRemaining,
 } from "@/lib/interview-persistence";
+import { useInterviewWebSocket } from "@/hooks/useInterviewWebSocket";
 
 const InterviewPage = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { user } = useAuth();
 
   // Video play queue to prevent concurrent play requests
   const playQueueRef = useRef<boolean>(false);
@@ -226,17 +229,50 @@ const InterviewPage = () => {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const subtitleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [showSubtitles, setShowSubtitles] = useState(false);
+  const isLoadingFromBackendRef = useRef<boolean>(false);
 
   // Warning System State
   const [warningData, setWarningData] = useState<WarningData>({
     issued: false,
   });
-  const [warningStatus, setWarningStatus] = useState<WarningStatus>({
-    warningCount: 0,
-    isTerminated: false,
-    canContinue: true,
-    lastWarningAt: null,
-  });
+  // Initialize warning status from localStorage if available
+  const getInitialWarningStatus = (): WarningStatus => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("interview-warning-status");
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch (error) {
+        console.error("Failed to load warning status:", error);
+      }
+    }
+    return {
+      warningCount: 0,
+      isTerminated: false,
+      canContinue: true,
+      lastWarningAt: null,
+    };
+  };
+
+  // Initialize tab switch count from localStorage if available
+  const getInitialTabSwitchCount = (): number => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = localStorage.getItem("interview-tab-switch-count");
+        if (stored) {
+          return parseInt(stored, 10);
+        }
+      } catch (error) {
+        console.error("Failed to load tab switch count:", error);
+      }
+    }
+    return 0;
+  };
+
+  const [warningStatus, setWarningStatus] = useState<WarningStatus>(
+    getInitialWarningStatus
+  );
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [pendingNextQuestion, setPendingNextQuestion] =
     useState<InterviewQuestion | null>(null);
@@ -244,7 +280,9 @@ const InterviewPage = () => {
   const [showTabSwitchModal, setShowTabSwitchModal] = useState(false);
   const [warningShownForCurrentCount, setWarningShownForCurrentCount] =
     useState(false);
-  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [tabSwitchCount, setTabSwitchCount] = useState(
+    getInitialTabSwitchCount
+  );
 
   // Proctoring
   const {
@@ -252,6 +290,7 @@ const InterviewPage = () => {
     startProctoring,
     stopProctoring,
     resetProctoring,
+    setProctoringData,
     isProctoring,
   } = useProctoring();
 
@@ -426,11 +465,231 @@ const InterviewPage = () => {
     }>
   >([]);
 
+  // Debug logging for WebSocket initialization values
+  useEffect(() => {
+    console.log("🔍 WebSocket hook values:", {
+      interviewId,
+      userId: user?.id,
+      userObject: user,
+    });
+  }, [interviewId, user]);
+
+  // WebSocket Interview Handler
+  const {
+    socket,
+    isConnected: isSocketConnected,
+    isGenerating: isGeneratingQuestionWS,
+    isAnalyzing: isAnalyzingWS,
+    generateFirstQuestion: generateFirstQuestionWS,
+    submitAnswer: submitAnswerWS,
+    reconnectInterview,
+    updateProctoringData: updateProctoringDataWS,
+    getProctoringData: getProctoringDataWS,
+  } = useInterviewWebSocket({
+    interviewId,
+    userId: user?.id || null,
+    onQuestionReceived: async (question, questionNumber) => {
+      console.log("📥 Question received via WebSocket:", question);
+      setCurrentQuestion(question);
+      setQuestionNumber(questionNumber);
+      setUserAnswer("");
+      setAnswerAnalysis(null);
+
+      // Clear speech recognition
+      setCurrentSessionTranscript("");
+      setSpeechText("");
+      setInterimTranscript("");
+      setFinalTranscript("");
+      resetSpeechTranscript();
+
+      // Stream question to chat
+      await streamQuestionToBoth(question.question, question.questionId);
+
+      // Start proctoring (don't reset - we need to preserve backend data)
+      if (!isProctoring) {
+        startProctoring();
+      }
+
+      saveCurrentState();
+    },
+    onAnswerSubmitted: (data) => {
+      console.log("✅ Answer submitted via WebSocket:", data);
+
+      // Answer already added to chat in handleSubmitAnswer
+      // No need to add it again here
+
+      // Handle warnings
+      if (data.warningIssued) {
+        const newWarningStatus = {
+          warningCount: data.warningCount,
+          isTerminated: data.interviewTerminated,
+          canContinue: data.canContinue,
+          lastWarningAt: data.lastWarningAt,
+        };
+
+        setWarningStatus(newWarningStatus);
+
+        // Immediately save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "interview-warning-status",
+            JSON.stringify(newWarningStatus)
+          );
+          localStorage.setItem(
+            "interview-warning-count",
+            data.warningCount.toString()
+          );
+        }
+
+        setWarningData({
+          issued: true,
+          isTerminated: data.interviewTerminated,
+          warningCount: data.warningCount,
+          sentiment: data.questionSentiment,
+        });
+
+        setShowWarningModal(true);
+      }
+
+      setIsSubmittingAnswer(false);
+      setIsAnalyzing(false);
+      saveCurrentState();
+    },
+    onWarning: (data) => {
+      console.log("⚠️ Warning received via WebSocket:", data);
+      setShowWarningModal(true);
+    },
+    onInterviewComplete: (data) => {
+      console.log("🎉 Interview complete via WebSocket:", data);
+      if (data.terminated) {
+        router.push("/dashboard?interviewTerminated=true");
+      } else {
+        handleAutoEndInterview();
+      }
+    },
+    onError: (error) => {
+      console.error("❌ WebSocket error:", error);
+      setError(error.message);
+      setIsGeneratingQuestion(false);
+      setIsSubmittingAnswer(false);
+      setIsAnalyzing(false);
+    },
+    onProctoringDataReceived: (data) => {
+      console.log("📊 Received proctoring data from backend:", data);
+
+      // Set flag to prevent sync to backend while loading FROM backend
+      isLoadingFromBackendRef.current = true;
+
+      // Update warning count from backend
+      if (data.warningCount !== undefined) {
+        setWarningStatus((prev) => ({
+          ...prev,
+          warningCount: data.warningCount,
+        }));
+        // Immediately save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "interview-warning-count",
+            data.warningCount.toString()
+          );
+        }
+      }
+
+      // Update proctoring data (tab switches, copy/paste) from backend
+      if (data.proctoringData) {
+        setProctoringData({
+          tabSwitches: data.proctoringData.tabSwitches || 0,
+          copyPasteCount: data.proctoringData.copyPasteCount || 0,
+        });
+        setTabSwitchCount(data.proctoringData.tabSwitches || 0);
+
+        // Immediately save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "interview-tab-switch-count",
+            (data.proctoringData.tabSwitches || 0).toString()
+          );
+        }
+
+        console.log("✅ Proctoring data updated from backend:", {
+          tabSwitches: data.proctoringData.tabSwitches,
+          copyPasteCount: data.proctoringData.copyPasteCount,
+        });
+      }
+
+      // Reset flag after a short delay to allow state updates to settle
+      setTimeout(() => {
+        isLoadingFromBackendRef.current = false;
+      }, 100);
+    },
+  });
+
+  // Sync WebSocket generating state with component state
+  useEffect(() => {
+    setIsGeneratingQuestion(isGeneratingQuestionWS);
+  }, [isGeneratingQuestionWS]);
+
+  // Sync WebSocket analyzing state with component state
+  useEffect(() => {
+    setIsAnalyzing(isAnalyzingWS);
+  }, [isAnalyzingWS]);
+
+  // Fetch proctoring data from backend when WebSocket connects (even before interview starts)
+  useEffect(() => {
+    if (isSocketConnected && interviewId) {
+      console.log("📊 Fetching proctoring data from backend on connection...");
+      getProctoringDataWS();
+    }
+  }, [isSocketConnected, interviewId, getProctoringDataWS]);
+
+  // Sync proctoring data to backend whenever tab switches or copy/paste changes
+  useEffect(() => {
+    // Don't sync if we're currently loading data FROM backend
+    if (isLoadingFromBackendRef.current) {
+      console.log("⏸️ Skipping sync - loading from backend");
+      return;
+    }
+
+    if (
+      isSocketConnected &&
+      interviewId &&
+      isInterviewStarted &&
+      proctoringData
+    ) {
+      const debounceTimeout = setTimeout(() => {
+        console.log("🔄 Syncing proctoring data to backend...", {
+          tabSwitches: proctoringData.tabSwitches,
+          copyPasteCount: proctoringData.copyPasteCount,
+        });
+        updateProctoringDataWS({
+          tabSwitches: proctoringData.tabSwitches,
+          copyPasteCount: proctoringData.copyPasteCount,
+        });
+      }, 1000); // Debounce to avoid too many updates
+
+      return () => clearTimeout(debounceTimeout);
+    }
+  }, [
+    isSocketConnected,
+    interviewId,
+    isInterviewStarted,
+    proctoringData.tabSwitches,
+    proctoringData.copyPasteCount,
+    updateProctoringDataWS,
+  ]);
+
   // Get interview type from URL params and check for termination
   useEffect(() => {
     setIsClient(true);
     const type = searchParams.get("type") || "resume";
     setInterviewType(type);
+
+    // Set interviewId from URL params immediately (needed for WebSocket initialization)
+    const interviewIdParam = searchParams.get("interviewId");
+    if (interviewIdParam) {
+      console.log("🔍 Setting interviewId from URL params:", interviewIdParam);
+      setInterviewId(interviewIdParam);
+    }
 
     // Check if interview was previously terminated
     const isTerminated = localStorage.getItem("interview-terminated");
@@ -480,11 +739,27 @@ const InterviewPage = () => {
           ...prev,
           warningCount: restoredState.warningCount || 0,
         }));
+        // Immediately save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "interview-warning-count",
+            (restoredState.warningCount || 0).toString()
+          );
+        }
       }
-      if (restoredState.warningStatus)
+      if (restoredState.warningStatus) {
         setWarningStatus(restoredState.warningStatus);
-      if (restoredState.tabSwitchCount !== undefined)
-        setTabSwitchCount(restoredState.tabSwitchCount);
+        // Immediately save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "interview-warning-status",
+            JSON.stringify(restoredState.warningStatus)
+          );
+        }
+      }
+
+      // NOTE: tabSwitchCount and proctoring data are now loaded from backend via WebSocket
+      // Don't restore from localStorage as it may be stale
 
       // Restore camera if it was on
       requestCameraPermission();
@@ -562,6 +837,14 @@ const InterviewPage = () => {
             cvViolations.multiplePersonIncidents + cvViolations.phoneDetections,
         },
       });
+
+      // Also save proctoring violations separately for the useProctoring hook
+      updateProctoringViolations({
+        tabSwitches: proctoringData.tabSwitches || 0,
+        copyPasteCount: proctoringData.copyPasteCount || 0,
+        faceDetectionIssues:
+          cvViolations.multiplePersonIncidents + cvViolations.phoneDetections,
+      });
     }
   }, [
     isInterviewStarted,
@@ -575,6 +858,7 @@ const InterviewPage = () => {
     userAnswer,
     warningStatus,
     tabSwitchCount,
+    proctoringData,
     cvViolations,
   ]);
 
@@ -606,6 +890,63 @@ const InterviewPage = () => {
     isInterviewStarted,
     interviewId,
   ]);
+
+  // CRITICAL FIX: Immediately save warning status changes to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined" && isInterviewStarted && interviewId) {
+      try {
+        localStorage.setItem(
+          "interview-warning-status",
+          JSON.stringify(warningStatus)
+        );
+        localStorage.setItem(
+          "interview-warning-count",
+          warningStatus.warningCount.toString()
+        );
+        console.log(
+          "💾 Warning status immediately saved to localStorage:",
+          warningStatus
+        );
+      } catch (error) {
+        console.error(
+          "❌ Failed to save warning status to localStorage:",
+          error
+        );
+      }
+    }
+  }, [warningStatus, isInterviewStarted, interviewId]);
+
+  // CRITICAL FIX: Immediately save tab switch count changes to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined" && isInterviewStarted && interviewId) {
+      try {
+        localStorage.setItem(
+          "interview-tab-switch-count",
+          tabSwitchCount.toString()
+        );
+        console.log(
+          "💾 Tab switch count immediately saved to localStorage:",
+          tabSwitchCount
+        );
+      } catch (error) {
+        console.error(
+          "❌ Failed to save tab switch count to localStorage:",
+          error
+        );
+      }
+    }
+  }, [tabSwitchCount, isInterviewStarted, interviewId]);
+
+  // Auto-scroll chat to latest message
+  useEffect(() => {
+    if (chatMessagesRef.current && chatMessages.length > 0) {
+      // Smooth scroll to bottom when new message is added
+      chatMessagesRef.current.scrollTo({
+        top: chatMessagesRef.current.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }, [chatMessages]);
 
   // Save state on page unload
   useEffect(() => {
@@ -1030,79 +1371,46 @@ const InterviewPage = () => {
 
   const generateFirstQuestion = async (interviewId: string) => {
     try {
-      setIsGeneratingQuestion(true);
-
-      // Double-check authentication before making API call
-      const { accessToken } = getAuthTokens();
-      if (!accessToken) {
-        throw new Error("No authentication token found. Please log in again.");
-      }
-
-      console.log("🎯 Generating first question for interview:", interviewId);
-      console.log("🔑 Auth token present:", !!accessToken);
-
-      const response = await interviewRealtimeApi.generateFirstQuestion(
-        interviewId,
-        {
-          interviewerBio: "AI Interviewer", // This will be overridden by backend with actual interviewer data
-        }
+      console.log(
+        "🎯 Generating first question via WebSocket for interview:",
+        interviewId
       );
 
-      if (response.success) {
-        setCurrentQuestion(response.data.question);
-        setQuestionNumber(response.data.questionNumber);
+      // Wait for WebSocket connection to be established
+      let attempts = 0;
+      const maxAttempts = 10; // Wait up to 5 seconds (10 * 500ms)
 
-        // Clear all speech recognition data for first question
-        setCurrentSessionTranscript("");
-        setSpeechText("");
-        setInterimTranscript("");
-        setFinalTranscript("");
-        resetSpeechTranscript();
-
-        // Start streaming the question to both chat and left panel
-        await streamQuestionToBoth(
-          response.data.question.question,
-          response.data.question.questionId
+      while (!isSocketConnected && attempts < maxAttempts) {
+        console.warn(
+          `⚠️ WebSocket not connected, waiting... (attempt ${
+            attempts + 1
+          }/${maxAttempts})`
         );
+        if (attempts === 0) {
+          toast.info("Connecting to server...");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        attempts++;
+      }
 
-        // Start proctoring
-        startProctoring();
-        console.log("✅ First question generated and streaming started");
-
-        // Save state after first question is generated
-        saveCurrentState();
-      } else {
+      if (!isSocketConnected) {
         throw new Error(
-          response.message || "Failed to generate first question"
+          "Failed to connect to server. Please check your connection."
         );
       }
+
+      console.log("✅ WebSocket connected, requesting first question...");
+      // Call WebSocket method to generate first question
+      generateFirstQuestionWS();
+
+      console.log("✅ First question request sent via WebSocket");
     } catch (error) {
       console.error("❌ Error generating first question:", error);
-
       if (error instanceof Error) {
-        if (
-          error.message.includes("401") ||
-          error.message.includes("Unauthorized")
-        ) {
-          setError("Authentication failed. Please log in again.");
-          // Clear auth tokens and redirect to login
-          setTimeout(() => {
-            router.push("/");
-          }, 2000);
-        } else if (error.message.includes("404")) {
-          setError(
-            "Interview not found. Please start a new interview from the dashboard."
-          );
-        } else if (error.message.includes("500")) {
-          setError("Server error. Please try again later.");
-        } else {
-          setError(`Failed to generate first question: ${error.message}`);
-        }
+        setError(error.message);
       } else {
         setError("Failed to generate first question. Please try again.");
       }
-    } finally {
-      setIsGeneratingQuestion(false);
     }
   };
 
@@ -1166,6 +1474,7 @@ const InterviewPage = () => {
     if (!currentQuestion || !interviewId || !userAnswer.trim()) return;
 
     try {
+      console.log("📤 Submitting answer via WebSocket...");
       setIsSubmittingAnswer(true);
       setIsAnalyzing(true);
       stopProctoring();
@@ -1176,11 +1485,23 @@ const InterviewPage = () => {
         handleStopRecording();
       }
 
-      const response = await interviewRealtimeApi.submitAnswer(
-        interviewId,
+      // Add user answer to chat BEFORE submitting (to avoid state issues)
+      const answerText = userAnswer; // Capture current answer
+      addMessageToChat(
+        "user",
+        answerText,
         currentQuestion.questionId,
+        answerText
+      );
+
+      // Clear the answer input immediately
+      setUserAnswer("");
+
+      // Submit via WebSocket
+      submitAnswerWS(
+        currentQuestion.questionId,
+        answerText, // Use captured answer
         {
-          answer: userAnswer,
           timeSpent: proctoringData.timeSpent,
           startTime: proctoringData.startTime || new Date(),
           endTime: new Date(),
@@ -1195,166 +1516,9 @@ const InterviewPage = () => {
         }
       );
 
-      if (response.success) {
-        try {
-          // Debug logging
-          console.log("Response data:", response.data);
-          console.log("Warning data:", response.data.warning);
-          console.log("Warning status:", response.data.warningStatus);
-
-          // Extract warning information from the new response structure
-          const responseData = response.data as any; // Type assertion for new response structure
-          const warningCount = responseData.warningCount || 0;
-          const warningIssued = responseData.warningIssued || false;
-          const interviewTerminated = responseData.interviewTerminated || false;
-          const canContinue = responseData.canContinue !== false;
-          const lastWarningAt = responseData.lastWarningAt || null;
-          const sentiment = responseData.sentiment || "NEUTRAL";
-
-          // Update warning status
-          setWarningStatus({
-            warningCount,
-            isTerminated: interviewTerminated,
-            canContinue,
-            lastWarningAt,
-          });
-
-          // Update warning data
-          setWarningData({
-            issued: warningIssued,
-            isTerminated: interviewTerminated,
-            warningCount,
-            sentiment,
-            reason:
-              responseData.analysis?.feedback ||
-              "Inappropriate language detected",
-            isProfessional: sentiment !== "NEGATIVE",
-            containsInappropriateContent: sentiment === "NEGATIVE",
-          });
-
-          // Store warning count in localStorage
-          if (warningCount > 0) {
-            localStorage.setItem(
-              "interview-warning-count",
-              warningCount.toString()
-            );
-            localStorage.setItem(
-              "interview-last-warning",
-              lastWarningAt || new Date().toISOString()
-            );
-          }
-
-          // Check if warning was issued
-          if (warningIssued) {
-            setShowWarningModal(true);
-
-            // Store the next question to show after warning modal is closed
-            if (responseData.nextQuestion) {
-              setPendingNextQuestion(responseData.nextQuestion);
-            }
-
-            // Save state when warning is issued
-            saveCurrentState();
-
-            // If interview is terminated, call endInterview API and show termination modal
-            if (interviewTerminated) {
-              // Call endInterview API to properly cancel the interview in backend
-              if (interviewId) {
-                try {
-                  await interviewRealtimeApi.endInterview(interviewId);
-                  console.log("Interview terminated and ended via API");
-                } catch (error) {
-                  console.error("Error ending terminated interview:", error);
-                }
-              }
-
-              // Store termination status in localStorage to prevent re-entry
-              localStorage.setItem("interview-terminated", "true");
-              localStorage.setItem(
-                "interview-termination-reason",
-                "Professional conduct violation"
-              );
-              localStorage.setItem(
-                "interview-termination-time",
-                new Date().toISOString()
-              );
-              return;
-            }
-          }
-
-          // Add user answer to chat
-          addMessageToChat(
-            "user",
-            userAnswer,
-            currentQuestion.questionId,
-            userAnswer
-          );
-
-          // Store analysis but don't show in chat
-          if (responseData.analysis) {
-            setAnswerAnalysis(responseData.analysis);
-          }
-
-          // Save state after answer submission
-          saveCurrentState();
-
-          // Check if interview can continue
-          if (!canContinue) {
-            setIsInterviewStarted(false);
-            return;
-          }
-
-          // Check if interview is complete (18 questions reached)
-          if (
-            responseData.isInterviewComplete ||
-            responseData.totalQuestionsAsked >= 18
-          ) {
-            console.log("🎯 Interview complete: All 18 questions asked");
-
-            // Automatically end the interview
-            await handleEndInterview();
-            return;
-          }
-
-          // Move to next question if available and no warning
-          if (responseData.nextQuestion && !warningIssued) {
-            setCurrentQuestion(responseData.nextQuestion);
-            setQuestionNumber(responseData.questionNumber);
-            setUserAnswer("");
-            setAnswerAnalysis(null);
-
-            // Clear all speech recognition data for new question
-            setCurrentSessionTranscript("");
-            setSpeechText("");
-            setInterimTranscript("");
-            setFinalTranscript("");
-            resetSpeechTranscript();
-
-            // Stream the next question to both chat and left panel
-            await streamQuestionToBoth(
-              responseData.nextQuestion.question,
-              responseData.nextQuestion.questionId
-            );
-
-            // Reset proctoring for next question
-            resetProctoring();
-            startProctoring();
-
-            // Save state after moving to next question
-            saveCurrentState();
-          } else if (!responseData.nextQuestion && !warningIssued) {
-            // Interview completed - auto end
-            console.log("🎯 Interview complete: No more questions");
-            await handleEndInterview();
-          }
-        } catch (error) {
-          console.error("Error processing response:", error);
-          // Continue with basic functionality even if warning processing fails
-        }
-      }
+      console.log("✅ Answer submission request sent via WebSocket");
     } catch (error) {
       console.error("Error submitting answer:", error);
-    } finally {
       setIsSubmittingAnswer(false);
       setIsAnalyzing(false);
     }
@@ -1816,6 +1980,15 @@ const InterviewPage = () => {
           const newCount = prevCount + 1;
           // Reset warning shown flag for new count
           setWarningShownForCurrentCount(false);
+
+          // Immediately save to localStorage
+          if (typeof window !== "undefined") {
+            localStorage.setItem(
+              "interview-tab-switch-count",
+              newCount.toString()
+            );
+          }
+
           return newCount;
         });
       }
@@ -1870,7 +2043,78 @@ const InterviewPage = () => {
   };
 
   // Handle hint toggle with smooth scrolling
-  const handleHintToggle = () => {
+  const handleHintToggle = async () => {
+    // Only fetch hint when showing it (not when hiding)
+    if (!showHint) {
+      // Validate that we have a current question
+      if (!currentQuestion || !interviewId) {
+        toast.error("No active question available");
+        return;
+      }
+
+      // SECURITY: Capture the current question ID at the moment of click
+      // This prevents any manipulation during the async operation
+      const currentQuestionId = currentQuestion.questionId;
+      const currentInterviewId = interviewId;
+
+      // Fetch expected answer from backend when showing hint
+      try {
+        // Get token from cookies
+        const token = document.cookie
+          .split("; ")
+          .find((row) => row.startsWith("auth_token="))
+          ?.split("=")[1];
+
+        if (!token) {
+          toast.error("Authentication required");
+          return;
+        }
+
+        // IMPORTANT: Use the captured questionId - no user input, no manipulation possible
+        const response = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/interview/${currentInterviewId}/questions/${currentQuestionId}/hint`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success) {
+            // Double verification: returned question must match the captured questionId
+            if (data.data.questionId === currentQuestionId) {
+              setCurrentQuestionData({
+                question: data.data.question,
+                answer: data.data.expectedAnswer,
+              });
+              console.log(
+                "✅ AI Copilot hint loaded for question:",
+                currentQuestionId
+              );
+            } else {
+              console.error("⚠️ Question mismatch:", {
+                requested: currentQuestionId,
+                received: data.data.questionId,
+              });
+              toast.error("Question mismatch - please refresh");
+              return;
+            }
+          }
+        } else {
+          const errorData = await response.json();
+          toast.error(errorData.message || "Failed to load hint");
+          return;
+        }
+      } catch (error) {
+        console.error("Error fetching hint:", error);
+        toast.error("Failed to load hint");
+        return;
+      }
+    }
+
     setShowHint(!showHint);
 
     // Scroll to question section when hint is shown
@@ -1914,9 +2158,10 @@ const InterviewPage = () => {
         pendingNextQuestion.questionId
       );
 
-      // Reset proctoring for next question
-      resetProctoring();
-      startProctoring();
+      // Continue proctoring for next question (don't reset - preserve violations)
+      if (!isProctoring) {
+        startProctoring();
+      }
     }
   };
 
@@ -2566,27 +2811,6 @@ const InterviewPage = () => {
                           Total Interviews: 12
                         </div>
                       </div>
-                    </div>
-                  )}
-
-                  {/* Floating Alert Panel - Top Right */}
-                  {isInterviewStarted && warningStatus.warningCount > 0 && (
-                    <div className="absolute top-4 right-4 flex flex-col space-y-2">
-                      {/* Warning Alert */}
-                      <motion.div
-                        initial={{ opacity: 0, x: 50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        className="flex items-center space-x-2 bg-orange-500/95 backdrop-blur-sm px-4 py-2 rounded-xl shadow-xl border border-orange-400/30">
-                        <AlertTriangle className="w-5 h-5 text-white" />
-                        <div className="text-white">
-                          <div className="text-sm font-bold">
-                            WARNING ISSUED
-                          </div>
-                          <div className="text-xs opacity-90">
-                            Count: {warningStatus.warningCount}
-                          </div>
-                        </div>
-                      </motion.div>
                     </div>
                   )}
 
