@@ -30,6 +30,7 @@
     "react-redux": "^9.2.0",
     "react-speech-recognition": "^4.0.1",
     "regenerator-runtime": "^0.14.1",
+    "socket.io-client": "^4.8.1",
     "sonner": "^1.4.0",
     "tailwind-merge": "^2.2.1"
   },
