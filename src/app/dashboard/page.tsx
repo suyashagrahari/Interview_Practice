@@ -32,6 +32,14 @@ import ResumeBasedInterview from "@/components/interview/resume-based-interview"
 import JobDescriptionInterview from "@/components/interview/job-description-interview";
 import TopicBasedInterview from "@/components/interview/topic-based-interview";
 import CompanyBasedInterview from "@/components/interview/company-based-interview";
+import IncompleteInterviewModal from "@/components/interview/incomplete-interview-modal";
+import {
+  getIncompleteInterview,
+  getIncompleteInterviewData,
+  clearInterviewState,
+  saveInterviewState,
+} from "@/lib/interview-persistence";
+import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 
 const Dashboard = () => {
   const { user, logout, isLoading, isAuthenticated } = useAuth();
@@ -71,6 +79,14 @@ const Dashboard = () => {
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(false);
   const [isInterviewSelected, setIsInterviewSelected] = useState(true); // Default to true to show resume interview
 
+  // Incomplete interview modal state
+  const [showIncompleteModal, setShowIncompleteModal] = useState(false);
+  const [incompleteInterviewData, setIncompleteInterviewData] =
+    useState<any>(null);
+  const [pendingInterviewAction, setPendingInterviewAction] = useState<
+    (() => void) | null
+  >(null);
+
   const closeProfile = () => {
     setIsProfileOpen(false);
     setIsProfileSelected(false);
@@ -93,6 +109,112 @@ const Dashboard = () => {
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  // Check for incomplete interview on mount (both local and server)
+  useEffect(() => {
+    if (isClient && isAuthenticated) {
+      const checkIncompleteInterview = async () => {
+        try {
+          // First check server for active interview (works across devices)
+          const serverCheck = await interviewRealtimeApi.checkActiveInterview();
+
+          if (
+            serverCheck.success &&
+            serverCheck.hasActiveInterview &&
+            serverCheck.data
+          ) {
+            // Found active interview on server
+            const serverData = serverCheck.data;
+
+            // Convert server data to modal format
+            const interviewData = {
+              interviewId: serverData.interviewId,
+              interviewType: serverData.interviewType,
+              questionNumber: serverData.currentQuestionNumber,
+              totalQuestions: serverData.totalQuestions,
+              timeRemaining: serverData.timeRemaining,
+              startTime: new Date(serverData.startTime),
+            };
+
+            setIncompleteInterviewData(interviewData);
+            console.log(
+              "⚠️ Active interview found on server (cross-device):",
+              interviewData
+            );
+
+            // Also sync this data to localStorage for offline access
+            if (serverData.currentQuestion) {
+              saveInterviewState({
+                interviewId: serverData.interviewId,
+                interviewType: serverData.interviewType,
+                isInterviewStarted: true,
+                interviewStartTime: new Date(serverData.startTime),
+                timeElapsed: serverData.timeElapsed,
+                timeRemaining: serverData.timeRemaining,
+                currentQuestion: serverData.currentQuestion,
+                questionNumber: serverData.currentQuestionNumber,
+                chatMessages: (serverData.chatHistory || []).map(
+                  (msg, index) => ({
+                    id: `msg-${index}`,
+                    type: msg.type,
+                    message: msg.message,
+                    timestamp: msg.timestamp,
+                  })
+                ),
+                userAnswer: "",
+                warningCount: serverData.warningCount || 0,
+                warningStatus: {
+                  warningCount: serverData.warningCount || 0,
+                  isTerminated: false,
+                  canContinue: true,
+                  lastWarningAt: null,
+                },
+                tabSwitchCount: serverData.tabSwitchCount || 0,
+                proctoringViolations: {
+                  tabSwitches: serverData.violations?.tabSwitches || 0,
+                  copyPasteCount: serverData.violations?.copyPasteCount || 0,
+                  faceDetectionIssues: 0,
+                },
+              });
+            }
+
+            return; // Exit early, we found server data
+          }
+
+          // No server data, check localStorage (fallback for offline scenarios)
+          const incomplete = getIncompleteInterview();
+          if (incomplete.hasIncomplete && incomplete.data) {
+            const interviewData = getIncompleteInterviewData();
+            if (interviewData) {
+              setIncompleteInterviewData(interviewData);
+              console.log(
+                "⚠️ Incomplete interview detected in localStorage:",
+                interviewData
+              );
+            }
+          }
+        } catch (error) {
+          console.error("❌ Failed to check for active interview:", error);
+
+          // Fallback to localStorage check if server fails
+          const incomplete = getIncompleteInterview();
+          if (incomplete.hasIncomplete && incomplete.data) {
+            const interviewData = getIncompleteInterviewData();
+            if (interviewData) {
+              setIncompleteInterviewData(interviewData);
+              console.log(
+                "⚠️ Incomplete interview detected (fallback to localStorage):",
+                interviewData
+              );
+            }
+          }
+        }
+      };
+
+      // Check after a short delay to ensure everything is loaded
+      setTimeout(checkIncompleteInterview, 500);
+    }
+  }, [isClient, isAuthenticated]);
 
   // Check for interview completion status
   useEffect(() => {
@@ -169,11 +291,79 @@ const Dashboard = () => {
     },
   ];
 
-  const handleStartInterview = async () => {
+  const handleStartInterview = async (formData?: any) => {
     try {
-      // Create interview first
-      const interviewData = {
-        resumeId: "your-resume-id", // This should come from the selected resume
+      // First check server for active interview (works across devices)
+      const serverCheck = await interviewRealtimeApi.checkActiveInterview();
+
+      if (
+        serverCheck.success &&
+        serverCheck.hasActiveInterview &&
+        serverCheck.data
+      ) {
+        // Found active interview on server
+        const serverData = serverCheck.data;
+
+        const interviewData = {
+          interviewId: serverData.interviewId,
+          interviewType: serverData.interviewType,
+          questionNumber: serverData.currentQuestionNumber,
+          totalQuestions: serverData.totalQuestions,
+          timeRemaining: serverData.timeRemaining,
+          startTime: new Date(serverData.startTime),
+        };
+
+        setIncompleteInterviewData(interviewData);
+        setShowIncompleteModal(true);
+        setPendingInterviewAction(
+          () => () => proceedWithNewInterview(formData)
+        );
+        return;
+      }
+
+      // Fallback: Check localStorage
+      const incomplete = getIncompleteInterview();
+      if (incomplete.hasIncomplete && incomplete.data) {
+        const interviewData = getIncompleteInterviewData();
+        if (interviewData) {
+          setIncompleteInterviewData(interviewData);
+          setShowIncompleteModal(true);
+          setPendingInterviewAction(
+            () => () => proceedWithNewInterview(formData)
+          );
+        }
+        return;
+      }
+
+      // No incomplete interview, proceed normally
+      await proceedWithNewInterview(formData);
+    } catch (error) {
+      console.error("❌ Error checking for active interview:", error);
+
+      // Fallback to localStorage check
+      const incomplete = getIncompleteInterview();
+      if (incomplete.hasIncomplete && incomplete.data) {
+        const interviewData = getIncompleteInterviewData();
+        if (interviewData) {
+          setIncompleteInterviewData(interviewData);
+          setShowIncompleteModal(true);
+          setPendingInterviewAction(
+            () => () => proceedWithNewInterview(formData)
+          );
+        }
+        return;
+      }
+
+      // No incomplete interview, proceed normally
+      await proceedWithNewInterview(formData);
+    }
+  };
+
+  const proceedWithNewInterview = async (formData?: any) => {
+    try {
+      // If form data is provided, use it; otherwise use default values
+      const interviewData = formData || {
+        resumeId: "your-resume-id",
         interviewType: "technical",
         level: "3-4",
         difficultyLevel: "intermediate",
@@ -186,23 +376,152 @@ const Dashboard = () => {
         },
       };
 
-      // This would call the API to create an interview
-      // const response = await interviewRealtimeApi.startInterview(interviewData);
-      // const interviewId = response.data.interviewId;
+      // Call the API to create an interview
+      const response = await interviewRealtimeApi.startInterview(interviewData);
+      const interviewId = response.data.interviewId;
 
-      // For now, use a mock interview ID
-      const mockInterviewId = "mock-interview-id";
-
-      // Navigate to interview page with interview ID
-      router.push(`/interview?interviewId=${mockInterviewId}`);
+      // Navigate to interview page with real interview ID
+      router.push(
+        `/interview?interviewId=${interviewId}&type=${interviewData.interviewType}`
+      );
     } catch (error) {
       console.error("Error starting interview:", error);
+      // Fallback to mock ID if API fails
+      const mockInterviewId = `mock-${Date.now()}`;
+      router.push(
+        `/interview?interviewId=${mockInterviewId}&type=${
+          formData?.interviewType || "resume"
+        }`
+      );
     }
   };
 
   const handleGuidelinesComplete = () => {
     setIsGuidelinesModalOpen(false);
     setIsInterviewStarted(true);
+  };
+
+  // Handle resume incomplete interview
+  const handleResumeIncompleteInterview = async () => {
+    if (!incompleteInterviewData) return;
+
+    try {
+      // Fetch latest interview state from server
+      const resumeData = await interviewRealtimeApi.resumeInterview(
+        incompleteInterviewData.interviewId
+      );
+
+      if (resumeData.success && resumeData.data) {
+        // Sync server data to localStorage before navigating
+        saveInterviewState({
+          interviewId: resumeData.data.interviewId,
+          interviewType: resumeData.data.interviewType,
+          isInterviewStarted: true,
+          interviewStartTime: new Date(resumeData.data.startTime),
+          timeElapsed: 0, // Will be calculated on interview page
+          timeRemaining: resumeData.data.timeRemaining,
+          currentQuestion: resumeData.data.currentQuestion,
+          questionNumber: resumeData.data.currentQuestionNumber,
+          chatMessages: resumeData.data.chatHistory || [],
+          userAnswer: "",
+          warningCount: resumeData.data.warningCount || 0,
+          warningStatus: {
+            warningCount: resumeData.data.warningCount || 0,
+            isTerminated: false,
+            canContinue: true,
+            lastWarningAt: null,
+          },
+          tabSwitchCount: 0,
+          proctoringViolations: resumeData.data.violations || {
+            tabSwitches: 0,
+            copyPasteCount: 0,
+            faceDetectionIssues: 0,
+          },
+        });
+
+        console.log("✅ Interview state synced from server to localStorage");
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch latest interview state:", error);
+      // Continue with existing data
+    }
+
+    setShowIncompleteModal(false);
+
+    // Navigate to interview page with the incomplete interview ID
+    router.push(
+      `/interview?interviewId=${incompleteInterviewData.interviewId}&type=${incompleteInterviewData.interviewType}`
+    );
+  };
+
+  // Handle end incomplete interview
+  const handleEndIncompleteInterview = async () => {
+    if (!incompleteInterviewData) return;
+
+    try {
+      // Call API to end the interview
+      if (incompleteInterviewData.interviewId) {
+        await interviewRealtimeApi.endInterview(
+          incompleteInterviewData.interviewId
+        );
+        console.log("✅ Incomplete interview ended successfully");
+      }
+    } catch (error) {
+      console.error("❌ Failed to end incomplete interview:", error);
+      // Continue even if API call fails
+    } finally {
+      // Clear the interview state from localStorage
+      clearInterviewState();
+      setShowIncompleteModal(false);
+      setIncompleteInterviewData(null);
+
+      // Clear the pending action - don't start a new interview
+      setPendingInterviewAction(null);
+
+      console.log("🗑️ Incomplete interview ended, staying on dashboard");
+    }
+  };
+
+  // Handle end incomplete interview and start new one
+  const handleEndAndStartNewInterview = async () => {
+    if (!incompleteInterviewData) return;
+
+    try {
+      // Call API to end the interview
+      if (incompleteInterviewData.interviewId) {
+        await interviewRealtimeApi.endInterview(
+          incompleteInterviewData.interviewId
+        );
+        console.log("✅ Incomplete interview ended successfully");
+      }
+    } catch (error) {
+      console.error("❌ Failed to end incomplete interview:", error);
+      // Continue even if API call fails
+    } finally {
+      // Clear the interview state from localStorage
+      clearInterviewState();
+      setShowIncompleteModal(false);
+      setIncompleteInterviewData(null);
+
+      // Execute the pending action (starting new interview) if it exists
+      if (pendingInterviewAction) {
+        console.log("🚀 Starting new interview after ending incomplete one");
+        pendingInterviewAction();
+        setPendingInterviewAction(null);
+      } else {
+        console.log("🗑️ Incomplete interview cleared, no pending action");
+      }
+
+      console.log("🗑️ Incomplete interview cleared");
+    }
+  };
+
+  // Handle cancel incomplete interview modal
+  const handleCancelIncompleteInterview = () => {
+    console.log("❌ Cancelled incomplete interview modal");
+    setShowIncompleteModal(false);
+    setIncompleteInterviewData(null);
+    setPendingInterviewAction(null);
   };
 
   // Check authentication - if not authenticated, redirect to home
@@ -740,16 +1059,28 @@ const Dashboard = () => {
                   transition={{ duration: 0.3 }}
                   className="h-full">
                   {activeTab === "resume" && (
-                    <ResumeBasedInterview onBack={closeInterview} />
+                    <ResumeBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "job-description" && (
-                    <JobDescriptionInterview onBack={closeInterview} />
+                    <JobDescriptionInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "topic" && (
-                    <TopicBasedInterview onBack={closeInterview} />
+                    <TopicBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "company" && (
-                    <CompanyBasedInterview onBack={closeInterview} />
+                    <CompanyBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                 </motion.div>
               ) : (
@@ -761,16 +1092,28 @@ const Dashboard = () => {
                   transition={{ duration: 0.3 }}
                   className="h-full">
                   {activeTab === "resume" && (
-                    <ResumeBasedInterview onBack={closeInterview} />
+                    <ResumeBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "job-description" && (
-                    <JobDescriptionInterview onBack={closeInterview} />
+                    <JobDescriptionInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "topic" && (
-                    <TopicBasedInterview onBack={closeInterview} />
+                    <TopicBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                   {activeTab === "company" && (
-                    <CompanyBasedInterview onBack={closeInterview} />
+                    <CompanyBasedInterview
+                      onBack={closeInterview}
+                      onStartInterview={handleStartInterview}
+                    />
                   )}
                 </motion.div>
               )}
@@ -783,6 +1126,15 @@ const Dashboard = () => {
       <InterviewGuidelinesModal
         isOpen={isGuidelinesModalOpen}
         onStartInterview={handleGuidelinesComplete}
+      />
+
+      {/* Incomplete Interview Modal */}
+      <IncompleteInterviewModal
+        isOpen={showIncompleteModal}
+        interviewData={incompleteInterviewData}
+        onResume={handleResumeIncompleteInterview}
+        onEnd={handleEndIncompleteInterview}
+        onCancel={handleCancelIncompleteInterview}
       />
     </div>
   );

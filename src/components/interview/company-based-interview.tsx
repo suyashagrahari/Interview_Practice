@@ -14,18 +14,29 @@ import {
   MapPin,
   Globe,
 } from "lucide-react";
+import {
+  getIncompleteInterview,
+  clearInterviewState,
+} from "@/lib/interview-persistence";
+import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 
 interface CompanyBasedInterviewProps {
   onBack?: () => void;
+  onStartInterview?: (formData?: any) => void;
 }
 
-const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
+const CompanyBasedInterview = ({
+  onBack,
+  onStartInterview,
+}: CompanyBasedInterviewProps) => {
   const [isConfiguring, setIsConfiguring] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isClient, setIsClient] = useState(false);
+  const [hasActiveInterview, setHasActiveInterview] = useState(false);
+  const [activeInterviewData, setActiveInterviewData] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     companyName: "",
@@ -126,6 +137,22 @@ const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
   };
 
   const handleStartInterview = () => {
+    // If onStartInterview prop is provided, use it (this will check for incomplete interviews)
+    if (onStartInterview) {
+      // Prepare interview data from form
+      const interviewData = {
+        companyName: formData.companyName,
+        position: formData.position,
+        department: formData.department,
+        experienceLevel: formData.experienceLevel,
+        interviewType: "company",
+        interviewerId: formData.interviewerId,
+        duration: formData.duration,
+      };
+      onStartInterview(interviewData);
+      return;
+    }
+
     // Redirect to full-screen interview page
     window.location.href = `/interview?type=company`;
   };
@@ -152,6 +179,68 @@ const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
     setIsClient(true);
   }, []);
 
+  // Check for active interviews
+  useEffect(() => {
+    const checkActiveInterview = async () => {
+      try {
+        // First check server for active interview
+        const serverCheck = await interviewRealtimeApi.checkActiveInterview();
+
+        if (
+          serverCheck.success &&
+          serverCheck.hasActiveInterview &&
+          serverCheck.data
+        ) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(serverCheck.data);
+          return;
+        }
+
+        // If server explicitly says no active interview, clear everything
+        if (serverCheck.success && !serverCheck.hasActiveInterview) {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+          // Clear localStorage as well to keep it in sync
+          clearInterviewState();
+          return;
+        }
+
+        // Fallback: Check localStorage only if server check failed
+        const incomplete = getIncompleteInterview();
+        if (incomplete.hasIncomplete && incomplete.data) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(incomplete.data);
+        } else {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+        }
+      } catch (error) {
+        console.error("Error checking for active interview:", error);
+        // Fallback to localStorage check
+        const incomplete = getIncompleteInterview();
+        if (incomplete.hasIncomplete && incomplete.data) {
+          setHasActiveInterview(true);
+          setActiveInterviewData(incomplete.data);
+        } else {
+          setHasActiveInterview(false);
+          setActiveInterviewData(null);
+        }
+      }
+    };
+
+    if (isClient) {
+      checkActiveInterview();
+    }
+  }, [isClient]);
+
+  // Handler to show active interview modal
+  const handleShowActiveInterviewModal = () => {
+    if (onStartInterview) {
+      // This will trigger the dashboard's incomplete interview modal
+      onStartInterview();
+    }
+  };
+
   if (!isClient) {
     return (
       <div className="h-full flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-purple-50 dark:from-slate-900 dark:via-blue-900 dark:to-purple-900">
@@ -177,7 +266,7 @@ const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
         initial={{ y: -100 }}
         animate={{ y: 0 }}
         className="sticky top-0 z-40 bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-white/20 shadow-sm  py-2">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto ">
           <div className="flex items-center justify-between h-14">
             {/* Left Section */}
             <div className="flex items-center space-x-3">
@@ -196,11 +285,17 @@ const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
 
             {/* Right Section */}
             <div className="flex items-center space-x-3">
-              {/* Status Indicator */}
-              <div className="hidden sm:flex items-center space-x-2 px-2 py-1 bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-200 rounded-lg text-xs font-medium">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Ready</span>
-              </div>
+              {/* Status Indicator - Only show if there's an active interview */}
+              {hasActiveInterview && (
+                <div
+                  className="hidden md:flex items-center space-x-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+                  onClick={handleShowActiveInterviewModal}>
+                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-medium text-gray-700 dark:text-gray-200">
+                    Interview in Progress
+                  </span>
+                </div>
+              )}
 
               {/* Video/Mic Controls - Only show when interview started */}
               {isInterviewStarted && (
@@ -225,15 +320,6 @@ const CompanyBasedInterview = ({ onBack }: CompanyBasedInterviewProps) => {
                   </button>
                 </div>
               )}
-
-              {/* Back Button */}
-              <motion.button
-                onClick={onBack}
-                className="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-200"
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}>
-                <ArrowLeft className="w-4 h-4" />
-              </motion.button>
             </div>
           </div>
         </div>
