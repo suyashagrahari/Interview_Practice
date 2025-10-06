@@ -35,9 +35,13 @@ import {
   Palette,
   X,
   RotateCcw,
+  Info,
 } from "lucide-react";
 import InterviewGuidelinesModal from "@/components/interview/interview-guidelines-modal";
 import StreamingText from "@/components/ui/streaming-text";
+import AudioPlayer from "@/components/interview/audio-player";
+import VideoAvatar from "@/components/interview/video-avatar";
+import AvatarSelector from "@/components/interview/avatar-selector";
 import { useImprovedSpeechRecognition } from "@/hooks/useImprovedSpeechRecognition";
 import { useProctoring } from "@/hooks/useProctoring";
 import { useComputerVision } from "@/hooks/useComputerVision";
@@ -51,8 +55,12 @@ import {
   WarningData,
   WarningStatus,
 } from "@/lib/api/interview-realtime";
+import { InterviewApiService, Interview } from "@/lib/api/interview";
+import { InterviewerApiService, Interviewer } from "@/lib/api/interviewer";
 import WarningModal from "@/components/interview/warning-modal";
 import InitialWarningModal from "@/components/interview/initial-warning-modal";
+import InterviewDetailsModal from "@/components/interview/interview-details-modal";
+import InterviewerDetailsModal from "@/components/interview/interviewer-details-modal";
 import { useTheme } from "@/contexts/theme-context";
 import { useAuth } from "@/contexts/auth-context";
 import Image from "next/image";
@@ -75,6 +83,78 @@ const InterviewPage = () => {
   // Video play queue to prevent concurrent play requests
   const playQueueRef = useRef<boolean>(false);
   const currentPlayPromiseRef = useRef<Promise<void> | null>(null);
+
+  // Fetch interview data by ID
+  const fetchInterviewData = useCallback(async (id: string) => {
+    if (!id) return;
+
+    setIsLoadingInterviewData(true);
+    try {
+      console.log("📊 Fetching interview data for ID:", id);
+      const response = await InterviewApiService.getInterviewById(id);
+      if (response.success && response.data) {
+        setInterviewData(response.data);
+        console.log("✅ Interview data loaded:", {
+          jobRole: response.data.jobRole,
+          level: response.data.level,
+          difficultyLevel: response.data.difficultyLevel,
+          experienceLevel: response.data.experienceLevel,
+          companyName: response.data.companyName,
+        });
+      } else {
+        console.warn("⚠️ No interview data found for ID:", id);
+        setInterviewData(null);
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch interview data:", error);
+      toast.error("Failed to load interview details");
+      setInterviewData(null);
+    } finally {
+      setIsLoadingInterviewData(false);
+    }
+  }, []);
+
+  // Fetch interviewer data by ID
+  const fetchInterviewerData = useCallback(async (id: string) => {
+    if (!id) return;
+
+    setIsLoadingInterviewerData(true);
+    try {
+      console.log("👤 Fetching interviewer data for ID:", id);
+      const response = await InterviewerApiService.getInterviewerById(id);
+      if (response.success && response.data) {
+        // Clean and validate the data
+        const cleanedData: Interviewer = {
+          ...response.data,
+          avatar:
+            response.data.avatar &&
+            typeof response.data.avatar === "string" &&
+            response.data.avatar.length > 0 &&
+            !response.data.avatar.includes("ED") // Filter out corrupted data
+              ? response.data.avatar
+              : "", // Use empty string instead of null
+        };
+
+        setInterviewerData(cleanedData);
+        console.log("✅ Interviewer data loaded:", {
+          name: cleanedData.name,
+          role: cleanedData.role,
+          rating: cleanedData.rating,
+          specialties: cleanedData.specialties,
+          avatar: cleanedData.avatar,
+        });
+      } else {
+        console.warn("⚠️ No interviewer data found for ID:", id);
+        setInterviewerData(null);
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch interviewer data:", error);
+      toast.error("Failed to load interviewer details");
+      setInterviewerData(null);
+    } finally {
+      setIsLoadingInterviewerData(false);
+    }
+  }, []);
 
   // Safe video play function that handles AbortError and prevents concurrent calls
   const safeVideoPlay = useCallback(
@@ -186,7 +266,28 @@ const InterviewPage = () => {
   const [interviewType, setInterviewType] = useState("");
   const [liveTranscription, setLiveTranscription] = useState("");
   const [isAISpeaking, setIsAISpeaking] = useState(false);
+  const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
+  const [showAvatarSelector, setShowAvatarSelector] = useState(false);
+  const [selectedAvatar, setSelectedAvatar] = useState<{
+    id: string;
+    name: string;
+    role: string;
+    experience: string;
+    rating: number;
+    skills: string[];
+    imageSrc: string;
+    videoSrc: string;
+  } | null>({
+    id: "avatar1",
+    name: "Mike Johnson",
+    role: "Tech Lead",
+    experience: "10 years",
+    rating: 4.9,
+    skills: ["Python", "AWS", "Docker"],
+    imageSrc: "/images/Avtar1.png",
+    videoSrc: "/models/Avtar1.mp4",
+  });
   const [showHint, setShowHint] = useState(false);
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const themeButtonRef = useRef<HTMLButtonElement>(null);
@@ -214,6 +315,18 @@ const InterviewPage = () => {
 
   // Real-time interview state
   const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [interviewData, setInterviewData] = useState<Interview | null>(null);
+  const [isLoadingInterviewData, setIsLoadingInterviewData] = useState(false);
+  const [isInterviewDetailsModalOpen, setIsInterviewDetailsModalOpen] =
+    useState(false);
+  const [interviewerData, setInterviewerData] = useState<Interviewer | null>(
+    null
+  );
+  const [isLoadingInterviewerData, setIsLoadingInterviewerData] =
+    useState(false);
+  const [isInterviewerDetailsModalOpen, setIsInterviewerDetailsModalOpen] =
+    useState(false);
+
   const [currentQuestion, setCurrentQuestion] =
     useState<InterviewQuestion | null>(null);
   const [questionNumber, setQuestionNumber] = useState(1);
@@ -222,6 +335,12 @@ const InterviewPage = () => {
   const [answerAnalysis, setAnswerAnalysis] = useState<AnswerAnalysis | null>(
     null
   );
+  const [currentAudio, setCurrentAudio] = useState<{
+    audioBase64: string;
+    url: string;
+    fileName: string;
+    mimeType: string;
+  } | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
@@ -488,12 +607,25 @@ const InterviewPage = () => {
   } = useInterviewWebSocket({
     interviewId,
     userId: user?.id || null,
-    onQuestionReceived: async (question, questionNumber) => {
-      console.log("📥 Question received via WebSocket:", question);
+    onQuestionReceived: async (question, questionNumber, audio) => {
+      console.log(
+        "📥 Question received via WebSocket:",
+        question,
+        "Audio:",
+        audio
+      );
       setCurrentQuestion(question);
       setQuestionNumber(questionNumber);
       setUserAnswer("");
       setAnswerAnalysis(null);
+
+      // Set audio data if available
+      if (audio) {
+        console.log("🎵 Audio received, setting for playback");
+        setCurrentAudio(audio);
+      } else {
+        setCurrentAudio(null);
+      }
 
       // Clear speech recognition
       setCurrentSessionTranscript("");
@@ -633,6 +765,14 @@ const InterviewPage = () => {
   useEffect(() => {
     setIsAnalyzing(isAnalyzingWS);
   }, [isAnalyzingWS]);
+
+  // Clear analyzing state when audio starts playing
+  useEffect(() => {
+    if (isAudioPlaying && isAnalyzing) {
+      console.log("🎵 Audio started playing, clearing analyzing state");
+      setIsAnalyzing(false);
+    }
+  }, [isAudioPlaying, isAnalyzing]);
 
   // Fetch proctoring data from backend when WebSocket connects (even before interview starts)
   useEffect(() => {
@@ -808,6 +948,32 @@ const InterviewPage = () => {
       return () => clearInterval(timer);
     }
   }, [isInterviewStarted, timeRemaining, interviewStartTime]);
+
+  // Fetch interview data when interviewId changes
+  useEffect(() => {
+    if (interviewId) {
+      fetchInterviewData(interviewId);
+    }
+  }, [interviewId, fetchInterviewData]);
+
+  // Fetch interviewer data when interview data is loaded
+  useEffect(() => {
+    if (interviewData?.interviewerId) {
+      fetchInterviewerData(interviewData.interviewerId);
+    }
+  }, [interviewData?.interviewerId, fetchInterviewerData]);
+
+  // Debug interviewer data
+  useEffect(() => {
+    if (interviewerData) {
+      console.log("🔍 Interviewer data loaded:", {
+        name: interviewerData.name,
+        avatar: interviewerData.avatar,
+        avatarType: typeof interviewerData.avatar,
+        avatarLength: interviewerData.avatar?.length,
+      });
+    }
+  }, [interviewerData]);
 
   // Manual save function - only call when needed
   const saveCurrentState = useCallback(() => {
@@ -1418,10 +1584,11 @@ const InterviewPage = () => {
     setIsStreaming(true);
     setStreamingText("");
 
-    // Simulate streaming by adding characters one by one
-    for (let i = 0; i <= questionText.length; i++) {
-      setStreamingText(questionText.slice(0, i));
-      await new Promise((resolve) => setTimeout(resolve, 30)); // 30ms delay between characters
+    // Stream word by word instead of character by character for better performance
+    const words = questionText.split(" ");
+    for (let i = 0; i <= words.length; i++) {
+      setStreamingText(words.slice(0, i).join(" "));
+      await new Promise((resolve) => setTimeout(resolve, 20)); // 20ms delay between words
     }
 
     setIsStreaming(false);
@@ -1452,9 +1619,10 @@ const InterviewPage = () => {
     // Add temporary message to chat
     setChatMessages((prev) => [...prev, tempMessage]);
 
-    // Simulate streaming by adding characters one by one
-    for (let i = 0; i <= questionText.length; i++) {
-      const currentText = questionText.slice(0, i);
+    // Stream word by word instead of character by character for better performance
+    const words = questionText.split(" ");
+    for (let i = 0; i <= words.length; i++) {
+      const currentText = words.slice(0, i).join(" ");
       setStreamingText(currentText);
 
       // Update the temporary message in chat
@@ -1464,7 +1632,7 @@ const InterviewPage = () => {
         )
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 30)); // 30ms delay between characters
+      await new Promise((resolve) => setTimeout(resolve, 100)); // 20ms delay between words
     }
 
     setIsStreaming(false);
@@ -1567,6 +1735,8 @@ const InterviewPage = () => {
     setIsRecording(true);
     setSpeechDisabled(false); // Enable speech processing
     setIsAISpeaking(false); // AI stops speaking when user starts
+    setIsAudioPlaying(false); // Stop audio when user starts recording
+    // Don't clear analyzing state here - let it persist until AI starts speaking
 
     // Request microphone permission first
     try {
@@ -1604,6 +1774,7 @@ const InterviewPage = () => {
     setIsRecording(false);
     setSpeechDisabled(true); // Disable speech processing
     setIsAISpeaking(true); // AI starts speaking when user stops
+    // Note: isAudioPlaying will be set by the AudioPlayer component when audio actually starts
 
     // Stop interview session - this disables auto-restart and heartbeat
     if (isSpeechSupported && stopSpeechInterviewSession) {
@@ -2399,72 +2570,179 @@ const InterviewPage = () => {
         </div>
 
         {/* Middle Section - User Details */}
-        <div className="flex-1 flex justify-center">
+        <div className="flex-1 flex justify-center items-center space-x-4">
           <div
-            className={`flex items-center space-x-6 px-4 py-2 rounded-lg ${
+            className={`flex items-center space-x-6 px-4 py-2 rounded-lg cursor-pointer transition-all duration-200 hover:scale-105 ${
               isDarkMode
-                ? "bg-slate-700/50 border border-slate-600"
-                : "bg-slate-100/50 border border-slate-200"
-            }`}>
+                ? "bg-slate-700/50 border border-slate-600 hover:bg-slate-700/70 hover:border-slate-500"
+                : "bg-slate-100/50 border border-slate-200 hover:bg-slate-200/70 hover:border-slate-300"
+            }`}
+            onClick={() => setIsInterviewDetailsModalOpen(true)}
+            title="Click to view detailed interview information">
+            {/* Show message when no interview data is available */}
+            {!isLoadingInterviewData && !interviewData && interviewId && (
+              <div className="text-center">
+                <div
+                  className={`text-sm ${
+                    isDarkMode ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                  No interview data available
+                </div>
+              </div>
+            )}
+
+            {/* Show loading state */}
+            {isLoadingInterviewData && (
+              <div className="flex items-center space-x-6">
+                <div className="text-center">
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-4 w-16 rounded mb-1"></div>
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-3 w-12 rounded"></div>
+                </div>
+                <div className="w-px h-8 bg-slate-300 dark:bg-slate-600"></div>
+                <div className="text-center">
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-4 w-8 rounded mb-1"></div>
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-3 w-8 rounded"></div>
+                </div>
+                <div className="w-px h-8 bg-slate-300 dark:bg-slate-600"></div>
+                <div className="text-center">
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-4 w-32 rounded mb-1"></div>
+                  <div className="animate-pulse bg-slate-300 dark:bg-slate-600 h-3 w-24 rounded"></div>
+                </div>
+              </div>
+            )}
+
             {/* Experience Level */}
-            <div className="text-center">
-              <div
-                className={`text-xs font-medium ${
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                }`}>
-                Experience
+            {!isLoadingInterviewData && interviewData && (
+              <div className="text-center">
+                <div
+                  className={`text-xs font-medium ${
+                    isDarkMode ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                  Experience
+                </div>
+                <div
+                  className={`text-sm font-semibold ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  {interviewData?.level || "N/A"} years
+                </div>
               </div>
-              <div
-                className={`text-sm font-semibold ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}>
-                Senior
-              </div>
-            </div>
+            )}
 
             {/* Divider */}
-            <div
-              className={`w-px h-8 ${
-                isDarkMode ? "bg-slate-600" : "bg-slate-300"
-              }`}></div>
+            {!isLoadingInterviewData && interviewData && (
+              <div
+                className={`w-px h-8 ${
+                  isDarkMode ? "bg-slate-600" : "bg-slate-300"
+                }`}></div>
+            )}
 
             {/* Job Level */}
-            <div className="text-center">
-              <div
-                className={`text-xs font-medium ${
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                }`}>
-                Level
+            {!isLoadingInterviewData && interviewData && (
+              <div className="text-center">
+                <div
+                  className={`text-xs font-medium ${
+                    isDarkMode ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                  Level
+                </div>
+                <div
+                  className={`text-sm font-semibold ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  {interviewData?.difficultyLevel || "N/A"}
+                </div>
               </div>
-              <div
-                className={`text-sm font-semibold ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}>
-                L5
-              </div>
-            </div>
+            )}
 
             {/* Divider */}
-            <div
-              className={`w-px h-8 ${
-                isDarkMode ? "bg-slate-600" : "bg-slate-300"
-              }`}></div>
+            {!isLoadingInterviewData && interviewData && (
+              <div
+                className={`w-px h-8 ${
+                  isDarkMode ? "bg-slate-600" : "bg-slate-300"
+                }`}></div>
+            )}
 
             {/* Job Title */}
-            <div className="text-center">
-              <div
-                className={`text-xs font-medium ${
-                  isDarkMode ? "text-slate-400" : "text-slate-500"
-                }`}>
-                Position
+            {!isLoadingInterviewData && interviewData && (
+              <div className="text-center">
+                <div
+                  className={`text-xs font-medium ${
+                    isDarkMode ? "text-slate-400" : "text-slate-500"
+                  }`}>
+                  Position
+                </div>
+                <div
+                  className={`text-sm font-semibold ${
+                    isDarkMode ? "text-white" : "text-slate-900"
+                  }`}>
+                  {interviewData?.jobRole || "N/A"}
+                </div>
               </div>
-              <div
-                className={`text-sm font-semibold ${
-                  isDarkMode ? "text-white" : "text-slate-900"
-                }`}>
-                Full Stack Developer
+            )}
+
+            {/* Experience Years */}
+            {!isLoadingInterviewData && interviewData?.experienceLevel && (
+              <>
+                {/* Divider */}
+                <div
+                  className={`w-px h-8 ${
+                    isDarkMode ? "bg-slate-600" : "bg-slate-300"
+                  }`}></div>
+
+                <div className="text-center">
+                  <div
+                    className={`text-xs font-medium ${
+                      isDarkMode ? "text-slate-400" : "text-slate-500"
+                    }`}>
+                    Years
+                  </div>
+                  <div
+                    className={`text-sm font-semibold ${
+                      isDarkMode ? "text-white" : "text-slate-900"
+                    }`}>
+                    {interviewData?.experienceLevel || "N/A"}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Company Name */}
+            {!isLoadingInterviewData && interviewData?.companyName && (
+              <>
+                {/* Divider */}
+                <div
+                  className={`w-px h-8 ${
+                    isDarkMode ? "bg-slate-600" : "bg-slate-300"
+                  }`}></div>
+
+                <div className="text-center">
+                  <div
+                    className={`text-xs font-medium ${
+                      isDarkMode ? "text-slate-400" : "text-slate-500"
+                    }`}>
+                    Company
+                  </div>
+                  <div
+                    className={`text-sm font-semibold ${
+                      isDarkMode ? "text-white" : "text-slate-900"
+                    }`}>
+                    {interviewData?.companyName || "N/A"}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Click indicator */}
+            {!isLoadingInterviewData && interviewData && (
+              <div className="ml-2">
+                <Info
+                  className={`w-4 h-4 ${
+                    isDarkMode ? "text-slate-400" : "text-slate-500"
+                  } opacity-60`}
+                />
               </div>
-            </div>
+            )}
           </div>
         </div>
 
@@ -2792,25 +3070,103 @@ const InterviewPage = () => {
 
                   {/* Transparent Interviewer Info Overlay */}
                   {isInterviewStarted && (
-                    <div className="absolute top-4 left-4 flex items-center space-x-3 bg-black/20 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl border border-white/10">
+                    <div
+                      className="absolute top-4 left-4 flex items-center space-x-3 bg-black/20 backdrop-blur-md px-4 py-2 rounded-2xl shadow-xl border border-white/10 cursor-pointer transition-all duration-200 hover:bg-black/30 hover:scale-105"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log(
+                          "👤 Interviewer tab clicked, opening modal..."
+                        );
+                        setIsInterviewerDetailsModalOpen(true);
+                      }}
+                      title="Click to view detailed interviewer information">
                       {/* AI Profile Image */}
                       <div className="w-8 h-8 rounded-full overflow-hidden border border-white/20">
-                        <Image
-                          src={AiImage}
-                          alt="AI Interviewer"
-                          width={32}
-                          height={32}
-                          className="w-full h-full object-cover"
-                        />
+                        {(() => {
+                          // Validate avatar URL
+                          const isValidUrl = (url: string) => {
+                            try {
+                              new URL(url);
+                              return true;
+                            } catch {
+                              return false;
+                            }
+                          };
+
+                          const hasValidAvatar =
+                            interviewerData?.avatar &&
+                            typeof interviewerData.avatar === "string" &&
+                            interviewerData.avatar.length > 0 &&
+                            interviewerData.avatar.trim() !== "" &&
+                            !interviewerData.avatar.includes("ED") &&
+                            (interviewerData.avatar.startsWith("http") ||
+                              interviewerData.avatar.startsWith("/") ||
+                              isValidUrl(interviewerData.avatar));
+
+                          if (hasValidAvatar) {
+                            return (
+                              <Image
+                                src={interviewerData.avatar}
+                                alt={interviewerData.name || "AI Interviewer"}
+                                width={32}
+                                height={32}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  console.warn(
+                                    "Failed to load interviewer avatar:",
+                                    interviewerData.avatar
+                                  );
+                                  // Fallback to default image on error
+                                  e.currentTarget.src = AiImage.src;
+                                }}
+                              />
+                            );
+                          } else {
+                            return (
+                              <Image
+                                src={AiImage}
+                                alt="AI Interviewer"
+                                width={32}
+                                height={32}
+                                className="w-full h-full object-cover"
+                              />
+                            );
+                          }
+                        })()}
                       </div>
 
                       {/* Interviewer Info */}
                       <div className="text-white">
-                        <div className="text-sm font-medium">Samantha Lee</div>
-                        <div className="text-xs opacity-80">
-                          Total Interviews: 12
+                        <div className="text-sm font-medium">
+                          {isLoadingInterviewerData ? (
+                            <div className="animate-pulse bg-white/20 h-4 w-24 rounded"></div>
+                          ) : (
+                            interviewerData?.name || "Test Interviewer"
+                          )}
+                        </div>
+                        <div className="text-xs opacity-80 flex items-center space-x-2">
+                          {isLoadingInterviewerData ? (
+                            <div className="animate-pulse bg-white/20 h-3 w-32 rounded"></div>
+                          ) : (
+                            <>
+                              {/* Rating */}
+                              <div className="flex items-center space-x-1">
+                                <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                                <span className="text-xs font-medium text-white/90">
+                                  {interviewerData?.rating || 4.5}
+                                </span>
+                              </div>
+                              <span>
+                                Total Interviews:{" "}
+                                {interviewerData?.numberOfInterviewers || 12}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
+
+                      {/* Click indicator */}
+                      <Info className="w-3 h-3 text-white/60 opacity-60" />
                     </div>
                   )}
 
@@ -2831,7 +3187,7 @@ const InterviewPage = () => {
                         <span>
                           {isSpeechInitializing
                             ? "Initializing..."
-                            : "Start Answering (10 min)"}
+                            : "Start Answering"}
                         </span>
                       </motion.button>
                     ) : (
@@ -2899,43 +3255,15 @@ const InterviewPage = () => {
                   </div>
 
                   {/* AI Speaking Indicator - Bottom Right */}
-                  <div className="absolute bottom-4 right-4 flex flex-col items-center">
-                    {/* AI Profile Picture */}
-                    <button
-                      onClick={() => setShowAIModal(!showAIModal)}
-                      className="w-20 h-20 rounded-full border-2 border-white hover:scale-105 transition-all duration-200 overflow-hidden mb-2 shadow-lg">
-                      <Image
-                        src={AiImage}
-                        alt="AI Interviewer"
-                        width={80}
-                        height={80}
-                        className="w-full h-full object-cover"
-                      />
-                    </button>
-                    {/* Speaking/Listening Button */}
-                    <div
-                      className={`text-white px-3 py-1.5 rounded-full text-xs font-medium flex items-center space-x-1 shadow-lg transition-all duration-300 ${
-                        isAnalyzing
-                          ? "bg-blue-600 animate-pulse"
-                          : isRecording
-                          ? "bg-slate-700"
-                          : "bg-slate-600"
-                      }`}>
-                      <Mic
-                        className={`w-3 h-3 ${
-                          isListening ? "animate-pulse" : ""
-                        }`}
-                      />
-                      <span>
-                        {isAnalyzing
-                          ? "Analyzing..."
-                          : isRecording
-                          ? isListening
-                            ? "Listening..."
-                            : "Preparing..."
-                          : "Speaking..."}
-                      </span>
-                    </div>
+                  <div className="absolute bottom-2 right-2">
+                    <VideoAvatar
+                      isSpeaking={isAudioPlaying}
+                      isListening={isRecording && isListening}
+                      isAnalyzing={isAnalyzing}
+                      currentAudio={currentAudio}
+                      videoSrc={selectedAvatar?.videoSrc}
+                      onClick={() => setShowAvatarSelector(true)}
+                    />
                   </div>
                 </div>
               </div>
@@ -3365,6 +3693,36 @@ const InterviewPage = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Avatar Selector Modal */}
+      <AvatarSelector
+        selectedAvatar={selectedAvatar}
+        onAvatarSelect={setSelectedAvatar}
+        isVisible={showAvatarSelector}
+        onClose={() => setShowAvatarSelector(false)}
+      />
+
+      {/* Interview Details Modal */}
+      <InterviewDetailsModal
+        isOpen={isInterviewDetailsModalOpen}
+        onClose={() => setIsInterviewDetailsModalOpen(false)}
+        interviewData={interviewData}
+        isLoading={isLoadingInterviewData}
+        isDarkMode={isDarkMode}
+        onInterviewerClick={() => setIsInterviewerDetailsModalOpen(true)}
+      />
+
+      {/* Interviewer Details Modal */}
+      <InterviewerDetailsModal
+        isOpen={isInterviewerDetailsModalOpen}
+        onClose={() => {
+          console.log("🔍 Closing interviewer modal...");
+          setIsInterviewerDetailsModalOpen(false);
+        }}
+        interviewerData={interviewerData}
+        isLoading={isLoadingInterviewerData}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 };

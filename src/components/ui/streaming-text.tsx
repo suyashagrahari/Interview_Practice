@@ -11,7 +11,7 @@ interface StreamingTextProps {
 
 const StreamingText = ({
   text,
-  speed = 30,
+  speed = 30, // Faster: 15ms per character (was 30)
   onComplete,
   className = "",
 }: StreamingTextProps) => {
@@ -48,5 +48,3 @@ const StreamingText = ({
 };
 
 export default StreamingText;
-
-
