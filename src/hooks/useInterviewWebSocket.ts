@@ -2,17 +2,24 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { InterviewQuestion, SubmitAnswerRequest } from '@/lib/api/interview-realtime';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 
 interface UseInterviewWebSocketProps {
   interviewId: string | null;
   userId: string | null;
-  onQuestionReceived: (question: InterviewQuestion, questionNumber: number) => void;
+  onQuestionReceived: (question: InterviewQuestion, questionNumber: number, audio?: AudioData) => void;
   onAnswerSubmitted: (data: any) => void;
   onWarning: (data: any) => void;
   onInterviewComplete: (data: any) => void;
   onError: (error: { message: string; code: string }) => void;
   onProctoringDataReceived?: (data: any) => void;
+}
+
+interface AudioData {
+  audioBase64: string;
+  url: string;
+  fileName: string;
+  mimeType: string;
 }
 
 export const useInterviewWebSocket = ({
@@ -87,7 +94,7 @@ export const useInterviewWebSocket = ({
     newSocket.on('question:first', (response) => {
       console.log('🎯 First question received:', response);
       if (response.success && response.data) {
-        onQuestionReceived(response.data.question, response.data.questionNumber);
+        onQuestionReceived(response.data.question, response.data.questionNumber, response.data.audio);
       }
       setIsGenerating(false);
     });
@@ -95,7 +102,7 @@ export const useInterviewWebSocket = ({
     newSocket.on('question:next', (response) => {
       console.log('🎯 Next question received:', response);
       if (response.success && response.data) {
-        onQuestionReceived(response.data.question, response.data.questionNumber);
+        onQuestionReceived(response.data.question, response.data.questionNumber, response.data.audio);
       }
       setIsGenerating(false);
       setIsAnalyzing(false);
