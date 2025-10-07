@@ -99,12 +99,12 @@ const Hero = () => {
       debugInfo: authResult.debugInfo,
     });
 
-    // If user is already authenticated (from any source), redirect to dashboard with resume mock interview
+    // If user is already authenticated (from any source), redirect to dashboard
     if (authResult.isAuthenticated) {
       console.log(
-        `✅ User is authenticated via ${authResult.source}, redirecting to resume interview`
+        `✅ User is authenticated via ${authResult.source}, redirecting to dashboard`
       );
-      router.push("/dashboard?interview=resume");
+      router.push("/dashboard");
       return;
     }
 

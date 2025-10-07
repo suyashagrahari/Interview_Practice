@@ -3,26 +3,16 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import Image from "next/image";
+import { AvatarData } from "@/types/interview-page/interview.types";
 
-interface Avatar {
-  id: string;
-  name: string;
-  role: string;
-  experience: string;
-  rating: number;
-  skills: string[];
-  imageSrc: string;
-  videoSrc: string;
-}
-
-const avatars: Avatar[] = [
+const avatars: AvatarData[] = [
   {
     id: "avatar1",
     name: "Mike Johnson",
     role: "Tech Lead",
     experience: "10 years",
     rating: 4.9,
-    skills: ["Python", "AWS", "Docker"],
+    skills: ["Python", "AWS", "Docker"] as readonly string[],
     imageSrc: "/images/Avtar1.png",
     videoSrc: "/models/Avtar1.mp4",
   },
@@ -32,7 +22,7 @@ const avatars: Avatar[] = [
     role: "Senior Engineer",
     experience: "9 years",
     rating: 4.8,
-    skills: ["Java", "Spring", "Microservices"],
+    skills: ["Java", "Spring", "Microservices"] as readonly string[],
     imageSrc: "/images/Avtar2.png",
     videoSrc: "/models/Avtar2.mp4",
   },
@@ -42,7 +32,7 @@ const avatars: Avatar[] = [
     role: "Senior Developer",
     experience: "8 years",
     rating: 4.8,
-    skills: ["React", "Node.js", "TypeScript"],
+    skills: ["React", "Node.js", "TypeScript"] as readonly string[],
     imageSrc: "/images/Avtar3.png",
     videoSrc: "/models/Avtar3.mp4",
   },
@@ -52,7 +42,7 @@ const avatars: Avatar[] = [
     role: "Engineering Manager",
     experience: "12 years",
     rating: 4.7,
-    skills: ["Leadership", "Product Management", "Agile"],
+    skills: ["Leadership", "Product Management", "Agile"] as readonly string[],
     imageSrc: "/images/Avtar4.png",
     videoSrc: "/models/Avtar4.mp4",
   },
@@ -62,15 +52,15 @@ const avatars: Avatar[] = [
     role: "Full Stack Developer",
     experience: "6 years",
     rating: 4.6,
-    skills: ["JavaScript", "React", "MongoDB"],
+    skills: ["JavaScript", "React", "MongoDB"] as readonly string[],
     imageSrc: "/images/Avtar5.png",
     videoSrc: "/models/avtar5.mp4",
   },
 ];
 
 interface AvatarSelectorProps {
-  selectedAvatar: Avatar | null;
-  onAvatarSelect: (avatar: Avatar) => void;
+  selectedAvatar: AvatarData | null;
+  onAvatarSelect: (avatar: any) => void;
   isVisible: boolean;
   onClose: () => void;
 }

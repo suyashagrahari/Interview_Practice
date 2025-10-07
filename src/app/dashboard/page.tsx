@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/auth-context";
 import { userStorage } from "@/lib/localStorage";
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
+import { isAuthenticated as checkIsAuthenticated } from "@/lib/cookies";
 import {
   useIncompleteInterview,
   useDashboardState,
@@ -72,10 +73,18 @@ const Dashboard = () => {
 
   // Check authentication - if not authenticated, redirect to home
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
+    // Also check cookies and localStorage directly for more reliable auth check
+    const hasAuthCookie = checkIsAuthenticated();
+    const hasStoredUser = !!storedUserData;
+
+    // Only redirect if ALL auth checks fail
+    if (!isLoading && !isAuthenticated && !hasAuthCookie && !hasStoredUser) {
+      console.log("❌ Not authenticated - redirecting to home");
       router.push("/");
+    } else if (!isLoading && (hasAuthCookie || hasStoredUser)) {
+      console.log("✅ User authenticated via cookie/localStorage");
     }
-  }, [isLoading, isAuthenticated, router]);
+  }, [isLoading, isAuthenticated, storedUserData, router]);
 
   /**
    * Handle starting a new interview
@@ -175,8 +184,12 @@ const Dashboard = () => {
     return <LoadingState message="Loading Dashboard" />;
   }
 
-  // If not authenticated, show redirect message
-  if (!isAuthenticated) {
+  // Check all auth sources
+  const hasAuthCookie = checkIsAuthenticated();
+  const hasStoredUser = !!storedUserData;
+
+  // If not authenticated via any method, show redirect message
+  if (!isAuthenticated && !hasAuthCookie && !hasStoredUser) {
     return <RedirectState />;
   }
 
