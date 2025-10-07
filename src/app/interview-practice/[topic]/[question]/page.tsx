@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import { redirect } from "next/navigation";
+import TopicPage from "../page";
 
 // This page handles the dynamic question routes
 // e.g., /interview-practice/react/what-is-react
@@ -73,8 +73,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function QuestionPage({ params }: QuestionPageProps) {
-  // Redirect to the main topic page - the topic page will handle displaying the specific question
-  const { topic, question } = await params;
-  redirect(`/interview-practice/${topic}?question=${question}`);
+export default function QuestionPage() {
+  // Render the topic page component - it will handle extracting the question from the URL
+  return <TopicPage />;
 }
