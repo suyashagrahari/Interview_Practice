@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import type { ChatMessage } from "../types/interview.types";
+import type { ChatMessage } from "../../types/interview-page/interview.types";
 import type { AnswerAnalysis } from "@/lib/api/interview-realtime";
 
 export const useInterviewChat = () => {

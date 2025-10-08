@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { INTERVIEW_CONSTANTS } from "../constants/interview.constants";
+import { INTERVIEW_CONSTANTS } from "../../constants/interview-page/interview.constants";
 
 export const useCameraManagement = () => {
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);

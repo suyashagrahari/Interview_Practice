@@ -1,7 +1,7 @@
 import React, { RefObject } from "react";
 import { motion } from "framer-motion";
 import { Bot, User } from "lucide-react";
-import type { ChatMessage } from "../../types/interview.types";
+import type { ChatMessage } from "../../../types/interview-page/interview.types";
 
 interface ChatSectionProps {
   isDarkMode: boolean;

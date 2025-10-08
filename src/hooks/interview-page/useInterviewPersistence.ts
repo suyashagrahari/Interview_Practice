@@ -4,9 +4,9 @@ import {
   updateProctoringViolations,
   clearInterviewState,
 } from "@/lib/interview-persistence";
-import type { ChatMessage, CVViolations } from "../types/interview.types";
+import type { ChatMessage, CVViolations } from "../../types/interview-page/interview.types";
 import type { InterviewQuestion, WarningStatus } from "@/lib/api/interview-realtime";
-import { INTERVIEW_CONSTANTS } from "../constants/interview.constants";
+import { INTERVIEW_CONSTANTS } from "../../constants/interview-page/interview.constants";
 
 interface PersistenceData {
   interviewId: string | null;

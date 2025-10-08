@@ -1,11 +1,23 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Eye, Info, Star, Play, Square, AlertCircle, RotateCcw } from "lucide-react";
+import {
+  X,
+  Eye,
+  Info,
+  Star,
+  Play,
+  Square,
+  AlertCircle,
+  RotateCcw,
+} from "lucide-react";
 import Image from "next/image";
 import AiImage from "../../../../../public/images/ai_image.jpeg";
 import VideoAvatar from "@/components/interview/video-avatar";
 import type { Interviewer } from "@/lib/api/interviewer";
-import type { AudioData, QuestionData } from "../../types/interview.types";
+import type {
+  AudioData,
+  QuestionData,
+} from "../../../types/interview-page/interview.types";
 
 interface VideoOverlaysProps {
   isDarkMode: boolean;

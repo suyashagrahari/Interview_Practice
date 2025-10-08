@@ -1,4 +1,4 @@
-import { INTERVIEW_CONSTANTS } from "../constants/interview.constants";
+import { INTERVIEW_CONSTANTS } from "../../constants/interview-page/interview.constants";
 
 export const streamText = async (
   text: string,

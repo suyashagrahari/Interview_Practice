@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { INTERVIEW_CONSTANTS } from "../constants/interview.constants";
+import { INTERVIEW_CONSTANTS } from "../../constants/interview-page/interview.constants";
 import { toast } from "@/utils/toast";
 
 interface UseInterviewTimerProps {

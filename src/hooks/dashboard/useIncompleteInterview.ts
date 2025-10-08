@@ -69,7 +69,7 @@ export const useIncompleteInterview = (
                 chatMessages: (serverData.chatHistory || []).map(
                   (msg: Record<string, unknown>, index: number) => ({
                     id: `msg-${index}`,
-                    type: msg.type as string,
+                    type: msg.type as "ai" | "user",
                     message: msg.message as string,
                     timestamp: msg.timestamp as string,
                   })

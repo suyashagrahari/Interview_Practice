@@ -16,24 +16,6 @@ interface SpeechRecognizerProps {
   permissionsAlreadyGranted?: boolean;
 }
 
-interface SpeechRecognitionEvent extends Event {
-  results: SpeechRecognitionResultList;
-  resultIndex: number;
-}
-
-interface SpeechRecognitionErrorEvent extends Event {
-  error: string;
-  message: string;
-}
-
-// Extend Window interface for TypeScript
-declare global {
-  interface Window {
-    SpeechRecognition: typeof SpeechRecognition;
-    webkitSpeechRecognition: typeof SpeechRecognition;
-  }
-}
-
 const WebkitSpeechRecognizer: React.FC<SpeechRecognizerProps> = ({
   onTranscript,
   onListeningChange,
@@ -106,7 +88,7 @@ const WebkitSpeechRecognizer: React.FC<SpeechRecognizerProps> = ({
 
   // Initialize speech recognition
   const initializeRecognition = useCallback(
-    (SpeechRecognition: typeof window.SpeechRecognition) => {
+    (SpeechRecognition: SpeechRecognitionConstructor) => {
       try {
         const recognition = new SpeechRecognition();
 

@@ -2,7 +2,10 @@ import React, { RefObject } from "react";
 import { VideoOff } from "lucide-react";
 import { VideoOverlays } from "./VideoOverlays";
 import type { Interviewer } from "@/lib/api/interviewer";
-import type { AudioData, QuestionData, WarningStatus } from "../../types/interview.types";
+import type {
+  AudioData,
+  QuestionData,
+} from "../../../types/interview-page/interview.types";
 
 interface VideoSectionProps {
   isDarkMode: boolean;
@@ -94,7 +97,11 @@ export const VideoSection: React.FC<VideoSectionProps> = ({
               onError={(e) => console.error("🎥 Video error in element:", e)}
             />
 
-            <VideoOverlays {...overlayProps} isDarkMode={isDarkMode} />
+            <VideoOverlays
+              {...overlayProps}
+              isDarkMode={isDarkMode}
+              isRecordingState={overlayProps.isRecording}
+            />
           </div>
         ) : (
           <div
