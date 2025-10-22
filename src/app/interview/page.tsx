@@ -123,19 +123,8 @@ const InterviewPage = () => {
   const isLoadingFromBackendRef = useRef<boolean>(false);
   const cvInitializedRef = useRef<boolean>(false);
 
-  // Custom hooks
-  const {
-    timeRemaining,
-    setTimeRemaining,
-    interviewStartTime,
-    setInterviewStartTime,
-    formatTime,
-    resetTimer,
-    isLowTime,
-  } = useInterviewTimer({
-    isInterviewStarted,
-    onTimeExpired: handleAutoEndInterview,
-  });
+  // Ref for tracking if auto-end has been called
+  const autoEndCalledRef = useRef(false);
 
   const {
     cameraStream,
@@ -212,6 +201,52 @@ const InterviewPage = () => {
     setProctoringData,
     isProctoring,
   } = useProctoring();
+
+  // Define callback for timer expiration after hooks are initialized
+  const handleAutoEndInterview = useCallback(async () => {
+    if (autoEndCalledRef.current) {
+      console.log("⏰ Auto-end already called, skipping");
+      return;
+    }
+
+    autoEndCalledRef.current = true;
+    console.log("⏰ Auto-ending interview (time expired or 18 questions reached)");
+
+    if (interviewId) {
+      try {
+        await interviewRealtimeApi.endInterview(interviewId);
+        clearInterviewLocalStorage(interviewId);
+        stopProctoring();
+        toast.success("Interview completed successfully!");
+        router.push("/dashboard?interviewCompleted=true");
+      } catch (error) {
+        console.error("Error auto-ending interview:", error);
+        clearInterviewLocalStorage(interviewId);
+        stopProctoring();
+        router.push("/dashboard?interviewCompleted=true");
+      }
+    } else {
+      clearInterviewLocalStorage(interviewId);
+      stopProctoring();
+      router.push("/dashboard?interviewCompleted=true");
+    }
+  }, [interviewId, router, stopProctoring, clearInterviewLocalStorage]);
+
+  // Timer hook - using the callback defined above
+  const {
+    timeRemaining,
+    setTimeRemaining,
+    interviewStartTime,
+    setInterviewStartTime,
+    formatTime,
+    resetTimer,
+    pauseTimer,
+    resumeTimer,
+    isLowTime,
+  } = useInterviewTimer({
+    isInterviewStarted,
+    onTimeExpired: handleAutoEndInterview,
+  });
 
   // Computer Vision
   const {
@@ -371,29 +406,6 @@ const InterviewPage = () => {
     setTimeout(() => {
       isLoadingFromBackendRef.current = false;
     }, 100);
-  }
-
-  async function handleAutoEndInterview() {
-    console.log("⏰ Auto-ending interview (time expired or 18 questions reached)");
-
-    if (interviewId) {
-      try {
-        await interviewRealtimeApi.endInterview(interviewId);
-        clearInterviewLocalStorage(interviewId);
-        stopProctoring();
-        toast.success("Interview completed successfully!");
-        router.push("/dashboard?interviewCompleted=true");
-      } catch (error) {
-        console.error("Error auto-ending interview:", error);
-        clearInterviewLocalStorage(interviewId);
-        stopProctoring();
-        router.push("/dashboard?interviewCompleted=true");
-      }
-    } else {
-      clearInterviewLocalStorage(interviewId);
-      stopProctoring();
-      router.push("/dashboard?interviewCompleted=true");
-    }
   }
 
   const handleEndInterview = async () => {
