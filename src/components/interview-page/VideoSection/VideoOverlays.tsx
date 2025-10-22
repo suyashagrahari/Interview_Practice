@@ -11,7 +11,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import Image from "next/image";
-import AiImage from "../../../../../public/images/ai_image.jpeg";
+import AiImage from "../../../../public/images/ai_image.jpeg";
 import VideoAvatar from "@/components/interview/video-avatar";
 import type { Interviewer } from "@/lib/api/interviewer";
 import type {
