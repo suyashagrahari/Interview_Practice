@@ -3,6 +3,7 @@ export * from './auth';
 export * from './strapi';
 export * from './resume';
 export * from './interview';
+export * from './interview-types';
 export * from './interviewer';
 
 // Re-export commonly used types

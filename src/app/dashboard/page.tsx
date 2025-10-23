@@ -6,10 +6,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { userStorage } from "@/lib/localStorage";
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 import { isAuthenticated as checkIsAuthenticated } from "@/lib/cookies";
-import {
-  useIncompleteInterview,
-  useDashboardState,
-} from "@/hooks/dashboard";
+import { useIncompleteInterview, useDashboardState } from "@/hooks/dashboard";
 import {
   Sidebar,
   ContentArea,
@@ -108,10 +105,41 @@ const Dashboard = () => {
           },
         };
 
-        // Call the API to create an interview
-        const response = await interviewRealtimeApi.startInterview(
-          interviewData
-        );
+        // Determine the correct API service based on interview type
+        let response;
+        const interviewType =
+          formData?.interviewType || interviewData.interviewType;
+
+        if (interviewType === "job-description") {
+          // Use job description API service
+          const { JobDescriptionBasedInterviewApiService } = await import(
+            "@/lib/api/interview-types"
+          );
+          response =
+            await JobDescriptionBasedInterviewApiService.startInterview(
+              interviewData as any
+            );
+        } else if (interviewType === "company") {
+          // Use company API service
+          const { CompanyBasedInterviewApiService } = await import(
+            "@/lib/api/interview-types"
+          );
+          response = await CompanyBasedInterviewApiService.startInterview(
+            interviewData as any
+          );
+        } else if (interviewType === "topic") {
+          // Use topic API service
+          const { TopicBasedInterviewApiService } = await import(
+            "@/lib/api/interview-types"
+          );
+          response = await TopicBasedInterviewApiService.startInterview(
+            interviewData as any
+          );
+        } else {
+          // Default to resume-based interview API service
+          response = await interviewRealtimeApi.startInterview(interviewData);
+        }
+
         const interviewId = response.data.interviewId;
 
         // Navigate to interview page with real interview ID
