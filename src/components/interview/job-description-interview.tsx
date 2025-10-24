@@ -28,6 +28,7 @@ import {
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 import { JobDescriptionBasedInterviewApiService } from "@/lib/api/interview-types";
 import { useInterviewers } from "@/hooks/useInterviewers";
+import { JdApiService } from "@/lib/api/jd";
 
 interface JobDescriptionInterviewProps {
   onBack?: () => void;
@@ -55,7 +56,7 @@ const JobDescriptionInterview = ({
   // JD-specific states
   const [showPasteMode, setShowPasteMode] = useState(false);
   const [jdText, setJdText] = useState("");
-  const [jdOptions, setJdOptions] = useState<string[]>([]);
+  const [jdOptions, setJdOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [jdSearchTerm, setJdSearchTerm] = useState("");
   const [showJdDropdown, setShowJdDropdown] = useState(false);
   const [showJdNameWarning, setShowJdNameWarning] = useState(false);
@@ -83,7 +84,6 @@ const JobDescriptionInterview = ({
     interviewType: "technical",
     level: "3-4",
     difficultyLevel: "intermediate",
-    jobRole: "",
     selectedJd: "",
     duration: "30",
     scheduled: false,
@@ -155,7 +155,9 @@ const JobDescriptionInterview = ({
       return;
     }
 
-    if (!uploadedFile && !jdText.trim()) {
+    // Check if we have content (either uploaded file or pasted text)
+    const hasContent = showPasteMode ? jdText.trim() : uploadedFile;
+    if (!hasContent) {
       setShowJdNameWarning(true);
       return;
     }
@@ -164,47 +166,74 @@ const JobDescriptionInterview = ({
     setUploadProgress(0);
 
     try {
-      // Simulate progress for better UX
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90; // Stop at 90% until actual upload completes
-          }
-          return prev + 10;
+      let response;
+
+      if (showPasteMode && jdText.trim()) {
+        // PASTED TEXT MODE - Call API with text
+        console.log("Uploading pasted JD text...");
+
+        // Simulate progress for pasted text
+        setUploadProgress(30);
+
+        response = await JdApiService.uploadJdText({
+          jdName: jdName.trim(),
+          jdText: jdText.trim(),
         });
-      }, 200);
 
-      // Simulate JD upload/creation
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+        setUploadProgress(100);
+      } else if (uploadedFile) {
+        // FILE UPLOAD MODE - Call API with file
+        console.log("Uploading JD file...");
 
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-
-      // Add the new JD name to options if it doesn't exist
-      if (!jdOptions.includes(jdName)) {
-        setJdOptions((prev) => [...prev, jdName]);
+        response = await JdApiService.uploadJdFile(
+          {
+            jd: uploadedFile,
+            jdName: jdName.trim(),
+          },
+          (progress) => {
+            setUploadProgress(progress);
+          }
+        );
+      } else {
+        throw new Error("No content to upload");
       }
 
-      // Store the JD ID for later use (simulated)
-      setSelectedJdId(`jd-${Date.now()}`);
+      // Check if upload was successful
+      if (response.success && response.data) {
+        console.log("JD uploaded successfully:", response.data);
 
-      // Set the selected JD to the entered name
-      setFormData((prev) => ({
-        ...prev,
-        selectedJd: jdName,
-      }));
-      setJdSearchTerm(jdName);
-      setShowJdNameWarning(false);
+        // Add the new JD to options if it doesn't exist
+        const existingJd = jdOptions.find((jd) => jd.name === jdName);
+        if (!existingJd) {
+          setJdOptions((prev) => [
+            ...prev,
+            { id: response.data.id, name: jdName },
+          ]);
+        }
 
-      // Enable all form fields after JD name is submitted
-      setIsJdNameSubmitted(true);
+        // Store the JD ID from the response
+        setSelectedJdId(response.data.id);
 
-      console.log("JD created with custom name:", jdName);
+        // Set the selected JD to the entered name
+        setFormData((prev) => ({
+          ...prev,
+          selectedJd: jdName,
+        }));
+        setJdSearchTerm(jdName);
+        setShowJdNameWarning(false);
+
+        // Enable all form fields after JD name is submitted
+        setIsJdNameSubmitted(true);
+
+        console.log("JD created successfully with ID:", response.data.id);
+      } else {
+        throw new Error(response.message || "Failed to upload JD");
+      }
     } catch (error: any) {
-      console.error("Error creating JD with custom name:", error);
+      console.error("Error uploading JD:", error);
       setShowJdNameWarning(true);
-      alert(error.message || "Failed to create JD. Please try again.");
+      alert(error.message || "Failed to upload JD. Please try again.");
+      setUploadProgress(0);
     } finally {
       setIsUploading(false);
     }
@@ -214,23 +243,26 @@ const JobDescriptionInterview = ({
     // Ensure jdName is always a string
     const safeJdName = typeof jdName === "string" ? jdName : "";
 
-    // Simulate getting JD data
     try {
-      // Simulate API call to get JD data
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Find the JD in our options list
+      const selectedJd = jdOptions.find((jd) => jd.name === safeJdName);
 
-      // Set the selected JD
-      setFormData((prev) => ({
-        ...prev,
-        selectedJd: safeJdName,
-      }));
-      setJdSearchTerm(safeJdName);
-      setShowJdDropdown(false);
+      if (selectedJd) {
+        // Store the JD ID
+        setSelectedJdId(selectedJd.id);
 
-      // Store the JD ID (simulated)
-      setSelectedJdId(`jd-${safeJdName.replace(/\s+/g, "-").toLowerCase()}`);
+        // Set the selected JD
+        setFormData((prev) => ({
+          ...prev,
+          selectedJd: safeJdName,
+        }));
+        setJdSearchTerm(safeJdName);
+        setShowJdDropdown(false);
 
-      console.log("JD selected:", safeJdName);
+        console.log("JD selected:", safeJdName, "with ID:", selectedJd.id);
+      } else {
+        console.error("JD not found in options:", safeJdName);
+      }
     } catch (error) {
       console.error("Error selecting JD:", error);
     }
@@ -241,6 +273,19 @@ const JobDescriptionInterview = ({
     if (showPasteMode) {
       // Clear text when switching back to upload mode
       setJdText("");
+      setFormData((prev) => ({
+        ...prev,
+        jdName: "",
+      }));
+      setIsJdNameSubmitted(false);
+    } else {
+      // Clear uploaded file when switching to paste mode
+      setUploadedFile(null);
+      setFormData((prev) => ({
+        ...prev,
+        jdName: "",
+      }));
+      setIsJdNameSubmitted(false);
     }
   };
 
@@ -310,54 +355,33 @@ const JobDescriptionInterview = ({
 
   const handleStartInterview = async () => {
     // Check required fields based on whether JD is uploaded or selected
-    const hasJdContent = (uploadedFile && isJdNameSubmitted) || selectedJdId;
+    const hasJdContent =
+      (uploadedFile && isJdNameSubmitted) || selectedJdId || jdText.trim();
     const hasRequiredFields =
       formData.interviewType &&
       formData.level &&
-      formData.jobRole &&
       formData.difficultyLevel &&
       formData.interviewerId;
 
     if (!hasJdContent || !hasRequiredFields) {
       alert(
-        "Please complete all required fields: JD content, Interview Type, Experience Level, Job Role, Difficulty Level, and Interviewer."
+        "Please complete all required fields: JD content, Interview Type, Experience Level, Difficulty Level, and Interviewer."
       );
       return;
     }
 
     // If onStartInterview prop is provided, use it (this will check for incomplete interviews)
     if (onStartInterview) {
-      // Prepare interview data from form
+      // Prepare interview data from form - only send essential fields like resume interview
       const interviewData = {
-        jobTitle: formData.jobTitle || formData.jdName,
-        companyName: formData.companyName || "Company",
-        experienceLevel: formData.experienceLevel,
-        interviewType: "job-description",
-        level: formData.level,
-        difficultyLevel: formData.difficultyLevel,
-        jobRole: formData.jobRole,
-        interviewerId: formData.interviewerId,
-        jobDescriptionText: jdText || formData.jobDescriptionText,
-      };
-      onStartInterview(interviewData);
-      return;
-    }
-
-    setIsStartingInterview(true);
-
-    try {
-      // Prepare interview data for job description-based interview
-      const interviewData = {
-        jobTitle: formData.jobTitle.trim() || formData.jdName.trim(),
-        companyName: formData.companyName.trim() || "Company",
-        experienceLevel: formData.experienceLevel,
+        jdId: selectedJdId || `jd-${Date.now()}`,
         interviewType: formData.interviewType as "technical" | "behavioral",
         level: formData.level,
         difficultyLevel: formData.difficultyLevel as
           | "beginner"
           | "intermediate"
           | "expert",
-        jobRole: formData.jobRole.trim(),
+        jobRole: "software-engineer", // Default job role since it's required by API
         interviewerId: formData.interviewerId.trim(),
         interviewer: {
           name: formData.interviewer.name.trim(),
@@ -366,10 +390,32 @@ const JobDescriptionInterview = ({
           bio: formData.interviewer.bio.trim(),
           introduction: formData.interviewer.introduction?.trim() || "",
         },
-        jobDescriptionText: jdText.trim() || formData.jobDescriptionText.trim(),
-        scheduled: formData.scheduled,
-        scheduledDate: formData.scheduledDate || undefined,
-        scheduledTime: formData.scheduledTime || undefined,
+      };
+      onStartInterview(interviewData);
+      return;
+    }
+
+    setIsStartingInterview(true);
+
+    try {
+      // Prepare interview data for job description-based interview - only send essential fields like resume interview
+      const interviewData = {
+        jdId: selectedJdId || `jd-${Date.now()}`,
+        interviewType: formData.interviewType as "technical" | "behavioral",
+        level: formData.level,
+        difficultyLevel: formData.difficultyLevel as
+          | "beginner"
+          | "intermediate"
+          | "expert",
+        jobRole: "software-engineer", // Default job role since it's required by API
+        interviewerId: formData.interviewerId.trim(),
+        interviewer: {
+          name: formData.interviewer.name.trim(),
+          numberOfInterviewers: formData.interviewer.numberOfInterviewers,
+          experience: formData.interviewer.experience.trim(),
+          bio: formData.interviewer.bio.trim(),
+          introduction: formData.interviewer.introduction?.trim() || "",
+        },
       };
 
       // Start the job description-based interview
@@ -411,23 +457,31 @@ const JobDescriptionInterview = ({
     setIsMicOn(!isMicOn);
   };
 
-  // Set client state to prevent hydration mismatch
+  // Set client state to prevent hydration mismatch and load existing JDs
   useEffect(() => {
     setIsClient(true);
 
-    // Initialize with some sample JD options
-    setJdOptions([
-      "Software Engineer - Frontend",
-      "Full Stack Developer - React/Node",
-      "Backend Developer - Python/Django",
-      "Data Scientist - Machine Learning",
-      "DevOps Engineer - AWS/Kubernetes",
-      "Product Manager - Tech",
-      "UI/UX Designer - Mobile Apps",
-      "QA Engineer - Automation",
-      "Tech Lead - Engineering",
-      "System Architect - Cloud",
-    ]);
+    // Load existing JDs from the backend
+    const loadExistingJds = async () => {
+      try {
+        const response = await JdApiService.getUserJds();
+        if (response.success && response.data) {
+          // Map JDs to include both id and name
+          const jds = response.data.map((jd) => ({
+            id: jd.id,
+            name: jd.jdName,
+          }));
+          setJdOptions(jds);
+          console.log("Loaded existing JDs:", jds);
+        }
+      } catch (error) {
+        console.error("Error loading existing JDs:", error);
+        // Initialize with empty array on error
+        setJdOptions([]);
+      }
+    };
+
+    loadExistingJds();
   }, []);
 
   // Handle click outside to close dropdown
@@ -451,7 +505,7 @@ const JobDescriptionInterview = ({
 
   // Filter JD options based on search term
   const filteredJdOptions = jdOptions.filter((option) =>
-    option.toLowerCase().includes(jdSearchTerm.toLowerCase())
+    option.name.toLowerCase().includes(jdSearchTerm.toLowerCase())
   );
 
   // Update dropdown position for portal-based dropdown
@@ -647,14 +701,21 @@ const JobDescriptionInterview = ({
                       {!showPasteMode ? (
                         // Upload Mode
                         <div
-                          onClick={() => fileInputRef.current?.click()}
-                          className="border-2 border-dashed border-gray-300 dark:border-white/20 rounded-lg p-6 text-center hover:border-blue-400 dark:hover:border-blue-400 transition-colors duration-200 cursor-pointer group relative">
+                          onClick={() =>
+                            !showPasteMode && fileInputRef.current?.click()
+                          }
+                          className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors duration-200 group relative ${
+                            showPasteMode
+                              ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 cursor-not-allowed opacity-50"
+                              : "border-gray-300 dark:border-white/20 hover:border-blue-400 dark:hover:border-blue-400 cursor-pointer"
+                          }`}>
                           <input
                             ref={fileInputRef}
                             type="file"
                             accept=".pdf,.doc,.docx,.txt"
                             onChange={handleFileUpload}
                             className="hidden"
+                            disabled={showPasteMode}
                           />
 
                           {isUploading ? (
@@ -696,7 +757,10 @@ const JobDescriptionInterview = ({
                                 </p>
                               </div>
                               <button
-                                onClick={() => setUploadedFile(null)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setUploadedFile(null);
+                                }}
                                 className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300">
                                 Remove file
                               </button>
@@ -847,9 +911,7 @@ const JobDescriptionInterview = ({
                             />
                             <div className="flex items-center px-3 py-2 text-green-600 dark:text-green-400">
                               <CheckCircle className="w-4 h-4 mr-1" />
-                              <span className="text-sm font-medium">
-                                Uploaded
-                              </span>
+                              <span className="text-sm font-medium">Added</span>
                             </div>
                           </div>
                         )}
@@ -880,12 +942,14 @@ const JobDescriptionInterview = ({
                             }
                             disabled={
                               !!(uploadedFile && !isJdNameSubmitted) &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                             }
                             className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
                               uploadedFile &&
                               !isJdNameSubmitted &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                                 ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                                 : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
                             }`}>
@@ -913,12 +977,14 @@ const JobDescriptionInterview = ({
                             }
                             disabled={
                               !!(uploadedFile && !isJdNameSubmitted) &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                             }
                             className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
                               uploadedFile &&
                               !isJdNameSubmitted &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                                 ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                                 : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
                             }`}>
@@ -931,98 +997,36 @@ const JobDescriptionInterview = ({
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Job Role <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={formData.jobRole || ""}
-                            onChange={(e) =>
-                              safeHandleInputChange(
-                                "jobRole",
-                                e.target.value || ""
-                              )
-                            }
-                            disabled={
-                              !!(uploadedFile && !isJdNameSubmitted) &&
-                              !selectedJdId
-                            }
-                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
-                              uploadedFile &&
-                              !isJdNameSubmitted &&
-                              !selectedJdId
-                                ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                                : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
-                            }`}>
-                            <option value="">Select job role</option>
-                            <option value="frontend-developer">
-                              Frontend Developer
-                            </option>
-                            <option value="backend-developer">
-                              Backend Developer
-                            </option>
-                            <option value="full-stack-developer">
-                              Full Stack Developer
-                            </option>
-                            <option value="mobile-developer">
-                              Mobile Developer
-                            </option>
-                            <option value="data-scientist">
-                              Data Scientist
-                            </option>
-                            <option value="devops-engineer">
-                              DevOps Engineer
-                            </option>
-                            <option value="software-engineer">
-                              Software Engineer
-                            </option>
-                            <option value="product-manager">
-                              Product Manager
-                            </option>
-                            <option value="ui-ux-designer">
-                              UI/UX Designer
-                            </option>
-                            <option value="qa-engineer">QA Engineer</option>
-                            <option value="system-architect">
-                              System Architect
-                            </option>
-                            <option value="tech-lead">Tech Lead</option>
-                            <option value="engineering-manager">
-                              Engineering Manager
-                            </option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Difficulty Level{" "}
-                            <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={formData.difficultyLevel || "intermediate"}
-                            onChange={(e) =>
-                              safeHandleInputChange(
-                                "difficultyLevel",
-                                e.target.value || ""
-                              )
-                            }
-                            disabled={
-                              !!(uploadedFile && !isJdNameSubmitted) &&
-                              !selectedJdId
-                            }
-                            className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
-                              uploadedFile &&
-                              !isJdNameSubmitted &&
-                              !selectedJdId
-                                ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
-                                : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
-                            }`}>
-                            <option value="beginner">Beginner</option>
-                            <option value="intermediate">Intermediate</option>
-                            <option value="expert">Expert</option>
-                          </select>
-                        </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Difficulty Level{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.difficultyLevel || "intermediate"}
+                          onChange={(e) =>
+                            safeHandleInputChange(
+                              "difficultyLevel",
+                              e.target.value || ""
+                            )
+                          }
+                          disabled={
+                            !!(uploadedFile && !isJdNameSubmitted) &&
+                            !selectedJdId &&
+                            !jdText.trim()
+                          }
+                          className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
+                            uploadedFile &&
+                            !isJdNameSubmitted &&
+                            !selectedJdId &&
+                            !jdText.trim()
+                              ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
+                              : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
+                          }`}>
+                          <option value="beginner">Beginner</option>
+                          <option value="intermediate">Intermediate</option>
+                          <option value="expert">Expert</option>
+                        </select>
                       </div>
 
                       {/* JD Selection Dropdown */}
@@ -1047,12 +1051,14 @@ const JobDescriptionInterview = ({
                             placeholder="Search or select JD"
                             disabled={
                               !!(uploadedFile && !isJdNameSubmitted) &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                             }
                             className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 ${
                               uploadedFile &&
                               !isJdNameSubmitted &&
-                              !selectedJdId
+                              !selectedJdId &&
+                              !jdText.trim()
                                 ? "border-gray-200 dark:border-white/10 bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                                 : "border-gray-300 dark:border-white/20 bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:ring-blue-500"
                             }`}
@@ -1082,10 +1088,14 @@ const JobDescriptionInterview = ({
                           }
                           disabled={
                             !!(uploadedFile && !isJdNameSubmitted) &&
-                            !selectedJdId
+                            !selectedJdId &&
+                            !jdText.trim()
                           }
                           className={`w-3 h-3 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 dark:focus:ring-blue-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 ${
-                            uploadedFile && !isJdNameSubmitted && !selectedJdId
+                            uploadedFile &&
+                            !isJdNameSubmitted &&
+                            !selectedJdId &&
+                            !jdText.trim()
                               ? "opacity-50 cursor-not-allowed"
                               : ""
                           }`}
@@ -1093,7 +1103,10 @@ const JobDescriptionInterview = ({
                         <label
                           htmlFor="schedule"
                           className={`text-xs font-medium ${
-                            uploadedFile && !isJdNameSubmitted && !selectedJdId
+                            uploadedFile &&
+                            !isJdNameSubmitted &&
+                            !selectedJdId &&
+                            !jdText.trim()
                               ? "text-gray-400 dark:text-gray-500"
                               : "text-gray-700 dark:text-gray-300"
                           }`}>
@@ -1144,7 +1157,10 @@ const JobDescriptionInterview = ({
                 {/* Interviewer Selection */}
                 <div
                   className={`bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-xl border border-gray-200/50 dark:border-white/20 shadow-lg p-4 lg:p-6 transition-all duration-200 ${
-                    uploadedFile && !isJdNameSubmitted && !selectedJdId
+                    uploadedFile &&
+                    !isJdNameSubmitted &&
+                    !selectedJdId &&
+                    !jdText.trim()
                       ? "opacity-50 pointer-events-none"
                       : ""
                   }`}>
@@ -1217,14 +1233,18 @@ const JobDescriptionInterview = ({
                           }
                           disabled={
                             !!(uploadedFile && !isJdNameSubmitted) &&
-                            !selectedJdId
+                            !selectedJdId &&
+                            !jdText.trim()
                           }
                           className={`p-3 rounded-lg border-2 transition-all duration-200 text-left hover:scale-105 ${
                             formData.interviewerId === interviewer._id
                               ? "border-blue-500 bg-blue-50 dark:bg-blue-500/20 shadow-lg"
                               : "border-gray-200 dark:border-white/20 hover:border-blue-300 dark:hover:border-blue-400"
                           } ${
-                            uploadedFile && !isJdNameSubmitted && !selectedJdId
+                            uploadedFile &&
+                            !isJdNameSubmitted &&
+                            !selectedJdId &&
+                            !jdText.trim()
                               ? "opacity-50 cursor-not-allowed"
                               : ""
                           }`}
@@ -1265,19 +1285,23 @@ const JobDescriptionInterview = ({
                   <motion.button
                     onClick={handleStartInterview}
                     disabled={
-                      !((uploadedFile && isJdNameSubmitted) || selectedJdId) ||
+                      !(
+                        (uploadedFile && isJdNameSubmitted) ||
+                        selectedJdId ||
+                        jdText.trim()
+                      ) ||
                       !formData.interviewType ||
                       !formData.level ||
-                      !formData.jobRole ||
                       !formData.difficultyLevel ||
                       !formData.interviewerId ||
                       isStartingInterview
                     }
                     className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 ${
-                      ((uploadedFile && isJdNameSubmitted) || selectedJdId) &&
+                      ((uploadedFile && isJdNameSubmitted) ||
+                        selectedJdId ||
+                        jdText.trim()) &&
                       formData.interviewType &&
                       formData.level &&
-                      formData.jobRole &&
                       formData.difficultyLevel &&
                       formData.interviewerId &&
                       !isStartingInterview
@@ -1286,10 +1310,11 @@ const JobDescriptionInterview = ({
                     }`}
                     whileHover={{
                       scale:
-                        ((uploadedFile && isJdNameSubmitted) || selectedJdId) &&
+                        ((uploadedFile && isJdNameSubmitted) ||
+                          selectedJdId ||
+                          jdText.trim()) &&
                         formData.interviewType &&
                         formData.level &&
-                        formData.jobRole &&
                         formData.difficultyLevel &&
                         formData.interviewerId &&
                         !isStartingInterview
@@ -1298,10 +1323,11 @@ const JobDescriptionInterview = ({
                     }}
                     whileTap={{
                       scale:
-                        ((uploadedFile && isJdNameSubmitted) || selectedJdId) &&
+                        ((uploadedFile && isJdNameSubmitted) ||
+                          selectedJdId ||
+                          jdText.trim()) &&
                         formData.interviewType &&
                         formData.level &&
-                        formData.jobRole &&
                         formData.difficultyLevel &&
                         formData.interviewerId &&
                         !isStartingInterview
@@ -1477,17 +1503,17 @@ const JobDescriptionInterview = ({
               zIndex: 99999,
             }}>
             {filteredJdOptions.length > 0 ? (
-              filteredJdOptions.map((jdName, index) => (
+              filteredJdOptions.map((jd) => (
                 <button
-                  key={index}
+                  key={jd.id}
                   onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    handleJdSelection(jdName);
+                    handleJdSelection(jd.name);
                   }}
                   className="w-full px-3 py-2 text-left text-sm text-gray-900 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 first:rounded-t-lg last:rounded-b-lg flex items-center justify-between">
-                  <span>{jdName}</span>
-                  {formData.selectedJd === jdName && (
+                  <span>{jd.name}</span>
+                  {formData.selectedJd === jd.name && (
                     <CheckCircle className="w-4 h-4 text-green-500" />
                   )}
                 </button>
