@@ -64,8 +64,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       transition={ANIMATION_VARIANTS.sidebar.transition}
       className={`${
         isSidebarCollapsed ? "w-16" : "w-[20%]"
-      } bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-r border-gray-200/30 dark:border-white/20 flex flex-col h-screen transition-all duration-300 ease-in-out flex-shrink-0 shadow-xl`}
-    >
+      } bg-white/95 dark:bg-slate-800/95 backdrop-blur-md border-r border-gray-200/30 dark:border-white/20 flex flex-col h-screen transition-all duration-300 ease-in-out flex-shrink-0 shadow-xl`}>
       {/* Header */}
       <SidebarHeader
         isCollapsed={isSidebarCollapsed}
@@ -80,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         isInterviewActive={isInterviewActive}
         onToggleMockInterview={toggleMockInterview}
         onSelectInterviewType={handleSelectInterviewType}
+        onChangeContentView={onChangeContentView}
       />
 
       {/* Profile Settings - Fixed at Bottom */}

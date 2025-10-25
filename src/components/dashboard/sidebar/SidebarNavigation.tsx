@@ -2,7 +2,7 @@ import { useRouter } from "next/navigation";
 import { SidebarInterviewTypes } from "./SidebarInterviewTypes";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { MAIN_NAVIGATION_ITEMS } from "@/constants/dashboard";
-import { InterviewTab } from "@/types/dashboard";
+import { InterviewTab, ContentView } from "@/types/dashboard";
 
 interface SidebarNavigationProps {
   isCollapsed: boolean;
@@ -11,6 +11,7 @@ interface SidebarNavigationProps {
   isInterviewActive: boolean;
   onToggleMockInterview: () => void;
   onSelectInterviewType: (type: InterviewTab) => void;
+  onChangeContentView: (view: ContentView) => void;
 }
 
 /**
@@ -23,10 +24,19 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   isInterviewActive,
   onToggleMockInterview,
   onSelectInterviewType,
+  onChangeContentView,
 }) => {
   const router = useRouter();
 
-  const handleNavigationClick = (path: string) => {
+  const handleNavigationClick = (path: string, id: string) => {
+    if (id === "upload-questions") {
+      onChangeContentView("upload-questions");
+      return;
+    }
+    if (id === "upload-company-questions") {
+      onChangeContentView("upload-company-questions");
+      return;
+    }
     router.push(path);
   };
 
@@ -49,7 +59,7 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
           icon={item.icon}
           label={item.label}
           isCollapsed={isCollapsed}
-          onClick={() => handleNavigationClick(item.path)}
+          onClick={() => handleNavigationClick(item.path, item.id)}
           tooltip={item.label}
         />
       ))}

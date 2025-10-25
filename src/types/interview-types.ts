@@ -128,7 +128,7 @@ export type InterviewResponse =
 // API endpoint types
 export type InterviewApiEndpoint = 
   | 'resume-interview'
-  | 'job-discription-interview'
+  | 'job-description-interview'
   | 'company-based-interview'
   | 'topic-based-interview';
 

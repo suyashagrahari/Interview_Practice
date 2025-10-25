@@ -5,6 +5,10 @@ import ResumeInterview from "@/components/interview/resume-interview";
 import JobDescriptionInterview from "@/components/interview/job-description-interview";
 import TopicBasedInterview from "@/components/interview/topic-based-interview";
 import CompanyBasedInterview from "@/components/interview/company-based-interview";
+import {
+  UploadTopicQuestions,
+  UploadCompanyQuestions,
+} from "@/components/upload-questions";
 import { ANIMATION_VARIANTS } from "@/constants/dashboard";
 import { ContentView, InterviewTab } from "@/types/dashboard";
 
@@ -39,8 +43,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               animate={ANIMATION_VARIANTS.content.animate}
               exit={ANIMATION_VARIANTS.content.exit}
               transition={ANIMATION_VARIANTS.content.transition}
-              className="h-full"
-            >
+              className="h-full">
               <SettingsContent onClose={onCloseSettings} />
             </motion.div>
           ) : contentView === "profile" ? (
@@ -50,9 +53,28 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               animate={ANIMATION_VARIANTS.content.animate}
               exit={ANIMATION_VARIANTS.content.exit}
               transition={ANIMATION_VARIANTS.content.transition}
-              className="h-full"
-            >
+              className="h-full">
               <ProfileContent onClose={onCloseProfile} />
+            </motion.div>
+          ) : contentView === "upload-questions" ? (
+            <motion.div
+              key="upload-questions"
+              initial={ANIMATION_VARIANTS.content.initial}
+              animate={ANIMATION_VARIANTS.content.animate}
+              exit={ANIMATION_VARIANTS.content.exit}
+              transition={ANIMATION_VARIANTS.content.transition}
+              className="h-full">
+              <UploadTopicQuestions />
+            </motion.div>
+          ) : contentView === "upload-company-questions" ? (
+            <motion.div
+              key="upload-company-questions"
+              initial={ANIMATION_VARIANTS.content.initial}
+              animate={ANIMATION_VARIANTS.content.animate}
+              exit={ANIMATION_VARIANTS.content.exit}
+              transition={ANIMATION_VARIANTS.content.transition}
+              className="h-full">
+              <UploadCompanyQuestions />
             </motion.div>
           ) : (
             <motion.div
@@ -61,8 +83,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               animate={ANIMATION_VARIANTS.content.animate}
               exit={ANIMATION_VARIANTS.content.exit}
               transition={ANIMATION_VARIANTS.content.transition}
-              className="h-full"
-            >
+              className="h-full">
               {activeTab === "resume" && (
                 <ResumeInterview
                   onBack={onCloseInterview}

@@ -8,6 +8,7 @@ import {
   Trophy,
   Users,
   Target,
+  Upload,
 } from "lucide-react";
 import { InterviewType } from "@/types/dashboard";
 
@@ -56,6 +57,18 @@ export const MAIN_NAVIGATION_ITEMS = [
     label: "Question Practice",
     icon: BookOpen,
     path: "/interview-practice",
+  },
+  {
+    id: "upload-questions",
+    label: "Upload Topic Questions",
+    icon: Upload,
+    path: "/dashboard/upload-questions",
+  },
+  {
+    id: "upload-company-questions",
+    label: "Upload Company Questions",
+    icon: Building,
+    path: "/dashboard/upload-company-questions",
   },
   {
     id: "history",
