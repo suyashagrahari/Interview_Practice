@@ -56,7 +56,9 @@ const JobDescriptionInterview = ({
   // JD-specific states
   const [showPasteMode, setShowPasteMode] = useState(false);
   const [jdText, setJdText] = useState("");
-  const [jdOptions, setJdOptions] = useState<Array<{ id: string; name: string }>>([]);
+  const [jdOptions, setJdOptions] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [jdSearchTerm, setJdSearchTerm] = useState("");
   const [showJdDropdown, setShowJdDropdown] = useState(false);
   const [showJdNameWarning, setShowJdNameWarning] = useState(false);
@@ -372,9 +374,9 @@ const JobDescriptionInterview = ({
 
     // If onStartInterview prop is provided, use it (this will check for incomplete interviews)
     if (onStartInterview) {
-      // Prepare interview data from form - only send essential fields like resume interview
+      // Prepare interview data from form - include required fields for JD-based interview
       const interviewData = {
-        jdId: selectedJdId || `jd-${Date.now()}`,
+        jobDescriptionId: selectedJdId || `jd-${Date.now()}`,
         interviewType: formData.interviewType as "technical" | "behavioral",
         level: formData.level,
         difficultyLevel: formData.difficultyLevel as
@@ -390,6 +392,12 @@ const JobDescriptionInterview = ({
           bio: formData.interviewer.bio.trim(),
           introduction: formData.interviewer.introduction?.trim() || "",
         },
+        jobTitle:
+          formData.jobTitle.trim() ||
+          formData.jdName.trim() ||
+          "Software Engineer",
+        companyName: formData.companyName.trim() || "Company",
+        experienceLevel: formData.experienceLevel || "intermediate",
       };
       onStartInterview(interviewData);
       return;
@@ -398,9 +406,9 @@ const JobDescriptionInterview = ({
     setIsStartingInterview(true);
 
     try {
-      // Prepare interview data for job description-based interview - only send essential fields like resume interview
+      // Prepare interview data for job description-based interview - include required fields for JD-based interview
       const interviewData = {
-        jdId: selectedJdId || `jd-${Date.now()}`,
+        jobDescriptionId: selectedJdId || `jd-${Date.now()}`,
         interviewType: formData.interviewType as "technical" | "behavioral",
         level: formData.level,
         difficultyLevel: formData.difficultyLevel as
@@ -416,6 +424,12 @@ const JobDescriptionInterview = ({
           bio: formData.interviewer.bio.trim(),
           introduction: formData.interviewer.introduction?.trim() || "",
         },
+        jobTitle:
+          formData.jobTitle.trim() ||
+          formData.jdName.trim() ||
+          "Software Engineer",
+        companyName: formData.companyName.trim() || "Company",
+        experienceLevel: formData.experienceLevel || "intermediate",
       };
 
       // Start the job description-based interview

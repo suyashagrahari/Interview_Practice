@@ -18,8 +18,8 @@ import {
 // Base API configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
-// Create axios instance for interview API
-const interviewApiClient = axios.create({
+// Create axios instance for interview types API
+const interviewTypesApiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
@@ -28,7 +28,7 @@ const interviewApiClient = axios.create({
 });
 
 // Request interceptor to add auth token
-interviewApiClient.interceptors.request.use(
+interviewTypesApiClient.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
       const { accessToken } = getAuthTokens();
@@ -68,7 +68,7 @@ export class InterviewTypeApiService {
   ): Promise<GetInterviewResponse<T>> {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response: AxiosResponse<GetInterviewResponse<T>> = await interviewApiClient.post(
+      const response: AxiosResponse<GetInterviewResponse<T>> = await interviewTypesApiClient.post(
         `/${endpoint}/start`,
         data
       );
@@ -89,7 +89,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.get(`/${endpoint}`, { params });
+      const response = await interviewTypesApiClient.get(`/${endpoint}`, { params });
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -103,7 +103,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.get(`/${endpoint}/${id}`);
+      const response = await interviewTypesApiClient.get(`/${endpoint}/${id}`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -118,7 +118,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.put(`/${endpoint}/${id}/status`, data);
+      const response = await interviewTypesApiClient.put(`/${endpoint}/${id}/status`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -129,7 +129,7 @@ export class InterviewTypeApiService {
   static async checkActiveInterview<T extends InterviewType>(interviewType: T) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.get(`/${endpoint}/check-active`);
+      const response = await interviewTypesApiClient.get(`/${endpoint}/check-active`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -143,7 +143,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.post(`/${endpoint}/${id}/resume`);
+      const response = await interviewTypesApiClient.post(`/${endpoint}/${id}/resume`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -158,7 +158,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.post(`/${endpoint}/${id}/generate-first-question`, data);
+      const response = await interviewTypesApiClient.post(`/${endpoint}/${id}/generate-first-question`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -174,7 +174,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.post(
+      const response = await interviewTypesApiClient.post(
         `/${endpoint}/${id}/questions/${questionId}/submit-answer`,
         data
       );
@@ -191,7 +191,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.post(`/${endpoint}/${id}/end`);
+      const response = await interviewTypesApiClient.post(`/${endpoint}/${id}/end`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -205,7 +205,7 @@ export class InterviewTypeApiService {
   ) {
     try {
       const endpoint = getApiEndpoint(interviewType);
-      const response = await interviewApiClient.delete(`/${endpoint}/${id}`);
+      const response = await interviewTypesApiClient.delete(`/${endpoint}/${id}`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -384,4 +384,4 @@ export class TopicBasedInterviewApiService {
 }
 
 // Export the API client for direct use if needed
-export { interviewApiClient };
+export { interviewTypesApiClient };

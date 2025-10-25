@@ -79,7 +79,7 @@ export interface JdUploadTextRequest {
   jdText: string;
 }
 
-export interface ApiError {
+export interface JdApiError {
   success: false;
   message: string;
   errors?: string[];

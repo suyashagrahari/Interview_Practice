@@ -74,7 +74,7 @@ export interface ResumeUploadRequest {
   resumeName: string;
 }
 
-export interface ApiError {
+export interface ResumeApiError {
   success: false;
   message: string;
   errors?: string[];

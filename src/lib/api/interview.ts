@@ -189,7 +189,7 @@ export interface UpdateAnswerAnalysisRequest {
   areasForImprovement?: string[];
 }
 
-export interface ApiError {
+export interface InterviewApiError {
   success: false;
   message: string;
   errors?: string[];
