@@ -611,13 +611,8 @@ const ResumeInterview = ({
 
     if (!isClient) return;
 
-    // Initial check
+    // Initial check only on mount - no periodic polling
     checkActiveInterview();
-
-    // Set up periodic check every 10 seconds
-    const intervalId = setInterval(() => {
-      checkActiveInterview();
-    }, 10000);
 
     // Check when window/tab gains focus (user comes back to the page)
     const handleVisibilityChange = () => {
@@ -635,7 +630,6 @@ const ResumeInterview = ({
 
     // Cleanup
     return () => {
-      clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", handleFocus);
     };
