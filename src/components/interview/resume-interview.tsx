@@ -56,15 +56,15 @@ import {
 } from "@/lib/interview-persistence";
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 
-interface ResumeBasedInterviewProps {
+interface ResumeInterviewProps {
   onBack?: () => void;
   onStartInterview?: (formData?: any) => void;
 }
 
-const ResumeBasedInterview = ({
+const ResumeInterview = ({
   onBack,
   onStartInterview,
-}: ResumeBasedInterviewProps) => {
+}: ResumeInterviewProps) => {
   const { user } = useAuth();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -609,9 +609,36 @@ const ResumeBasedInterview = ({
       }
     };
 
-    if (isClient) {
+    if (!isClient) return;
+
+    // Initial check
+    checkActiveInterview();
+
+    // Set up periodic check every 10 seconds
+    const intervalId = setInterval(() => {
       checkActiveInterview();
-    }
+    }, 10000);
+
+    // Check when window/tab gains focus (user comes back to the page)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkActiveInterview();
+      }
+    };
+
+    const handleFocus = () => {
+      checkActiveInterview();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+
+    // Cleanup
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [isClient]);
 
   // Handler to show active interview modal
@@ -1450,4 +1477,4 @@ const ResumeBasedInterview = ({
   );
 };
 
-export default ResumeBasedInterview;
+export default ResumeInterview;

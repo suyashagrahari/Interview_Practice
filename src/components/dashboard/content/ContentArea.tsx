@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import ProfileContent from "@/components/profile/profile-content";
 import SettingsContent from "@/components/settings/settings-content";
-import ResumeBasedInterview from "@/components/interview/resume-based-interview";
+import ResumeInterview from "@/components/interview/resume-interview";
 import JobDescriptionInterview from "@/components/interview/job-description-interview";
 import TopicBasedInterview from "@/components/interview/topic-based-interview";
 import CompanyBasedInterview from "@/components/interview/company-based-interview";
@@ -64,7 +64,7 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               className="h-full"
             >
               {activeTab === "resume" && (
-                <ResumeBasedInterview
+                <ResumeInterview
                   onBack={onCloseInterview}
                   onStartInterview={onStartInterview}
                 />

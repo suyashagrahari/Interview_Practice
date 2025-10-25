@@ -31,7 +31,7 @@ export interface BaseInterviewRequest {
 }
 
 // Resume-based interview request
-export interface ResumeBasedInterviewRequest extends BaseInterviewRequest {
+export interface ResumeInterviewRequest extends BaseInterviewRequest {
   resumeId: string;
 }
 
@@ -64,7 +64,7 @@ export interface TopicBasedInterviewRequest extends BaseInterviewRequest {
 
 // Union type for all interview requests
 export type InterviewRequest = 
-  | ResumeBasedInterviewRequest 
+  | ResumeInterviewRequest 
   | JobDescriptionBasedInterviewRequest 
   | CompanyBasedInterviewRequest 
   | TopicBasedInterviewRequest;
@@ -86,7 +86,7 @@ export interface BaseInterviewResponse {
   };
 }
 
-export interface ResumeBasedInterviewResponse extends BaseInterviewResponse {
+export interface ResumeInterviewResponse extends BaseInterviewResponse {
   data: BaseInterviewResponse['data'] & {
     resumeName: string;
   };
@@ -117,21 +117,21 @@ export interface TopicBasedInterviewResponse extends BaseInterviewResponse {
 
 // Union type for all interview responses
 export type InterviewResponse = 
-  | ResumeBasedInterviewResponse 
+  | ResumeInterviewResponse 
   | JobDescriptionBasedInterviewResponse 
   | CompanyBasedInterviewResponse 
   | TopicBasedInterviewResponse;
 
 // API endpoint types
 export type InterviewApiEndpoint = 
-  | 'resume-based-interview'
+  | 'resume-interview'
   | 'jd-based-interview'
   | 'company-based-interview'
   | 'topic-based-interview';
 
 // Helper type to get the correct request type based on interview type
 export type GetInterviewRequest<T extends InterviewType> = 
-  T extends 'resume' ? ResumeBasedInterviewRequest :
+  T extends 'resume' ? ResumeInterviewRequest :
   T extends 'job-description' ? JobDescriptionBasedInterviewRequest :
   T extends 'company' ? CompanyBasedInterviewRequest :
   T extends 'topic' ? TopicBasedInterviewRequest :
@@ -139,7 +139,7 @@ export type GetInterviewRequest<T extends InterviewType> =
 
 // Helper type to get the correct response type based on interview type
 export type GetInterviewResponse<T extends InterviewType> = 
-  T extends 'resume' ? ResumeBasedInterviewResponse :
+  T extends 'resume' ? ResumeInterviewResponse :
   T extends 'job-description' ? JobDescriptionBasedInterviewResponse :
   T extends 'company' ? CompanyBasedInterviewResponse :
   T extends 'topic' ? TopicBasedInterviewResponse :

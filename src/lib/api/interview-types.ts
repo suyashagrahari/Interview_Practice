@@ -5,11 +5,11 @@ import {
   InterviewApiEndpoint,
   GetInterviewRequest,
   GetInterviewResponse,
-  ResumeBasedInterviewRequest,
+  ResumeInterviewRequest,
   JobDescriptionBasedInterviewRequest,
   CompanyBasedInterviewRequest,
   TopicBasedInterviewRequest,
-  ResumeBasedInterviewResponse,
+  ResumeInterviewResponse,
   JobDescriptionBasedInterviewResponse,
   CompanyBasedInterviewResponse,
   TopicBasedInterviewResponse,
@@ -47,7 +47,7 @@ interviewTypesApiClient.interceptors.request.use(
 const getApiEndpoint = (interviewType: InterviewType): InterviewApiEndpoint => {
   switch (interviewType) {
     case 'resume':
-      return 'resume-based-interview';
+      return 'resume-interview';
     case 'job-description':
       return 'jd-based-interview';
     case 'company':
@@ -231,8 +231,8 @@ export class InterviewTypeApiService {
 }
 
 // Specific interview type services for easier usage
-export class ResumeBasedInterviewApiService {
-  static async startInterview(data: ResumeBasedInterviewRequest): Promise<ResumeBasedInterviewResponse> {
+export class ResumeInterviewApiService {
+  static async startInterview(data: ResumeInterviewRequest): Promise<ResumeInterviewResponse> {
     return InterviewTypeApiService.startInterview('resume', data);
   }
 

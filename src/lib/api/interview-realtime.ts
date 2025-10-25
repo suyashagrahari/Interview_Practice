@@ -127,7 +127,7 @@ export const interviewRealtimeApi = {
     interviewId: string,
     data: GenerateFirstQuestionRequest
   ): Promise<GenerateFirstQuestionResponse> => {
-    const response = await apiClient.post(`/resume-based-interview/${interviewId}/generate-first-question`, data);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/generate-first-question`, data);
     return response.data;
   },
 
@@ -139,7 +139,7 @@ export const interviewRealtimeApi = {
     questionId: string,
     data: SubmitAnswerRequest
   ): Promise<SubmitAnswerResponse> => {
-    const response = await apiClient.post(`/resume-based-interview/${interviewId}/questions/${questionId}/submit-answer`, data);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/questions/${questionId}/submit-answer`, data);
     return response.data;
   },
 
@@ -147,7 +147,7 @@ export const interviewRealtimeApi = {
    * Start an interview session (Resume-based)
    */
   startInterview: async (interviewData: any) => {
-    const response = await apiClient.post('/resume-based-interview/start', interviewData);
+    const response = await apiClient.post('/resume-interview/start', interviewData);
     return response.data;
   },
 
@@ -155,7 +155,7 @@ export const interviewRealtimeApi = {
    * Get interview by ID (Resume-based)
    */
   getInterview: async (interviewId: string) => {
-    const response = await apiClient.get(`/resume-based-interview/${interviewId}`);
+    const response = await apiClient.get(`/resume-interview/${interviewId}`);
     return response.data;
   },
 
@@ -163,7 +163,7 @@ export const interviewRealtimeApi = {
    * Update interview status (Resume-based)
    */
   updateInterviewStatus: async (interviewId: string, status: string) => {
-    const response = await apiClient.put(`/resume-based-interview/${interviewId}/status`, { status });
+    const response = await apiClient.put(`/resume-interview/${interviewId}/status`, { status });
     return response.data;
   },
 
@@ -171,7 +171,7 @@ export const interviewRealtimeApi = {
    * End interview (Resume-based)
    */
   endInterview: async (interviewId: string) => {
-    const response = await apiClient.post(`/resume-based-interview/${interviewId}/end`);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/end`);
     return response.data;
   },
 
@@ -221,7 +221,7 @@ export const interviewRealtimeApi = {
       interviewerName?: string;
     } | null;
   }> => {
-    const response = await apiClient.get('/resume-based-interview/check-active');
+    const response = await apiClient.get('/resume-interview/check-active');
     return response.data;
   },
 
@@ -243,7 +243,7 @@ export const interviewRealtimeApi = {
       violations: any;
     };
   }> => {
-    const response = await apiClient.get(`/resume-based-interview/resume/${interviewId}`);
+    const response = await apiClient.get(`/resume-interview/resume/${interviewId}`);
     return response.data;
   },
 
@@ -251,7 +251,7 @@ export const interviewRealtimeApi = {
    * Get expected answer (hint) for a question in resume-based interview
    */
   getExpectedAnswer: async (interviewId: string, questionId: string) => {
-    const response = await apiClient.get(`/resume-based-interview/${interviewId}/questions/${questionId}/hint`);
+    const response = await apiClient.get(`/resume-interview/${interviewId}/questions/${questionId}/hint`);
     return response.data;
   },
 };

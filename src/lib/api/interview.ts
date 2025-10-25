@@ -200,7 +200,7 @@ export class InterviewApiService {
   // Start a new resume-based interview
   static async startInterview(data: StartInterviewRequest): Promise<StartInterviewResponse> {
     try {
-      const response: AxiosResponse<StartInterviewResponse> = await interviewApiClient.post('/resume-based-interview/start', data);
+      const response: AxiosResponse<StartInterviewResponse> = await interviewApiClient.post('/resume-interview/start', data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -214,7 +214,7 @@ export class InterviewApiService {
     page?: number;
   }): Promise<InterviewListResponse> {
     try {
-      const response: AxiosResponse<InterviewListResponse> = await interviewApiClient.get('/resume-based-interview', {
+      const response: AxiosResponse<InterviewListResponse> = await interviewApiClient.get('/resume-interview', {
         params
       });
       return response.data;
@@ -226,7 +226,7 @@ export class InterviewApiService {
   // Get specific resume-based interview by ID
   static async getInterviewById(id: string): Promise<InterviewResponse> {
     try {
-      const response: AxiosResponse<InterviewResponse> = await interviewApiClient.get(`/resume-based-interview/${id}`);
+      const response: AxiosResponse<InterviewResponse> = await interviewApiClient.get(`/resume-interview/${id}`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -236,7 +236,7 @@ export class InterviewApiService {
   // Update resume-based interview status
   static async updateInterviewStatus(id: string, data: UpdateStatusRequest): Promise<{ success: boolean; message: string; data: any }> {
     try {
-      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-based-interview/${id}/status`, data);
+      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-interview/${id}/status`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -246,7 +246,7 @@ export class InterviewApiService {
   // Add question to resume-based interview
   static async addQuestion(id: string, data: AddQuestionRequest): Promise<{ success: boolean; message: string; data: any }> {
     try {
-      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.post(`/resume-based-interview/${id}/questions`, data);
+      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.post(`/resume-interview/${id}/questions`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -256,7 +256,7 @@ export class InterviewApiService {
   // Update answer for a question in resume-based interview
   static async updateAnswer(id: string, questionId: string, data: UpdateAnswerRequest): Promise<{ success: boolean; message: string; data: any }> {
     try {
-      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-based-interview/${id}/questions/${questionId}/answer`, data);
+      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-interview/${id}/questions/${questionId}/answer`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -266,7 +266,7 @@ export class InterviewApiService {
   // Update answer analysis for resume-based interview
   static async updateAnswerAnalysis(id: string, questionId: string, data: UpdateAnswerAnalysisRequest): Promise<{ success: boolean; message: string; data: any }> {
     try {
-      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-based-interview/${id}/questions/${questionId}/analysis`, data);
+      const response: AxiosResponse<{ success: boolean; message: string; data: any }> = await interviewApiClient.put(`/resume-interview/${id}/questions/${questionId}/analysis`, data);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
@@ -276,7 +276,7 @@ export class InterviewApiService {
   // Delete resume-based interview
   static async deleteInterview(id: string): Promise<{ success: boolean; message: string }> {
     try {
-      const response: AxiosResponse<{ success: boolean; message: string }> = await interviewApiClient.delete(`/resume-based-interview/${id}`);
+      const response: AxiosResponse<{ success: boolean; message: string }> = await interviewApiClient.delete(`/resume-interview/${id}`);
       return response.data;
     } catch (error: any) {
       throw this.handleError(error);
