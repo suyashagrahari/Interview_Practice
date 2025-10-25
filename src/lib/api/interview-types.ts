@@ -49,7 +49,7 @@ const getApiEndpoint = (interviewType: InterviewType): InterviewApiEndpoint => {
     case 'resume':
       return 'resume-interview';
     case 'job-description':
-      return 'jd-based-interview';
+      return 'job-discription-interview';
     case 'company':
       return 'company-based-interview';
     case 'topic':

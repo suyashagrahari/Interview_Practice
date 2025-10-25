@@ -374,16 +374,15 @@ const JobDescriptionInterview = ({
 
     // If onStartInterview prop is provided, use it (this will check for incomplete interviews)
     if (onStartInterview) {
-      // Prepare interview data from form - include required fields for JD-based interview
+      // Prepare interview data from form - include all required fields
       const interviewData = {
         jobDescriptionId: selectedJdId || `jd-${Date.now()}`,
         interviewType: formData.interviewType as "technical" | "behavioral",
-        level: formData.level,
         difficultyLevel: formData.difficultyLevel as
           | "beginner"
           | "intermediate"
           | "expert",
-        jobRole: "software-engineer", // Default job role since it's required by API
+        experienceLevel: formData.level || "3-4", // Send years range like "0-2", "3-4", etc.
         interviewerId: formData.interviewerId.trim(),
         interviewer: {
           name: formData.interviewer.name.trim(),
@@ -392,12 +391,6 @@ const JobDescriptionInterview = ({
           bio: formData.interviewer.bio.trim(),
           introduction: formData.interviewer.introduction?.trim() || "",
         },
-        jobTitle:
-          formData.jobTitle.trim() ||
-          formData.jdName.trim() ||
-          "Software Engineer",
-        companyName: formData.companyName.trim() || "Company",
-        experienceLevel: formData.experienceLevel || "intermediate",
       };
       onStartInterview(interviewData);
       return;
@@ -406,16 +399,15 @@ const JobDescriptionInterview = ({
     setIsStartingInterview(true);
 
     try {
-      // Prepare interview data for job description-based interview - include required fields for JD-based interview
+      // Prepare interview data for job description-based interview - include all required fields
       const interviewData = {
         jobDescriptionId: selectedJdId || `jd-${Date.now()}`,
         interviewType: formData.interviewType as "technical" | "behavioral",
-        level: formData.level,
         difficultyLevel: formData.difficultyLevel as
           | "beginner"
           | "intermediate"
           | "expert",
-        jobRole: "software-engineer", // Default job role since it's required by API
+        experienceLevel: formData.level || "3-4", // Send years range like "0-2", "3-4", etc.
         interviewerId: formData.interviewerId.trim(),
         interviewer: {
           name: formData.interviewer.name.trim(),
@@ -424,12 +416,6 @@ const JobDescriptionInterview = ({
           bio: formData.interviewer.bio.trim(),
           introduction: formData.interviewer.introduction?.trim() || "",
         },
-        jobTitle:
-          formData.jobTitle.trim() ||
-          formData.jdName.trim() ||
-          "Software Engineer",
-        companyName: formData.companyName.trim() || "Company",
-        experienceLevel: formData.experienceLevel || "intermediate",
       };
 
       // Start the job description-based interview

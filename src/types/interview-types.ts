@@ -36,12 +36,15 @@ export interface ResumeInterviewRequest extends BaseInterviewRequest {
 }
 
 // Job description-based interview request
-export interface JobDescriptionBasedInterviewRequest extends BaseInterviewRequest {
+export interface JobDescriptionBasedInterviewRequest extends Omit<BaseInterviewRequest, 'level' | 'difficultyLevel' | 'jobRole'> {
   jobDescriptionId?: string;
   jobDescriptionText?: string;
-  jobTitle: string;
-  companyName: string; // Required for JD-based interviews
-  experienceLevel: string; // Required for JD-based interviews
+  jobTitle?: string;
+  companyName?: string;
+  experienceLevel?: string;
+  level?: string;
+  difficultyLevel?: DifficultyLevel;
+  jobRole?: string;
 }
 
 // Company-based interview request
@@ -125,7 +128,7 @@ export type InterviewResponse =
 // API endpoint types
 export type InterviewApiEndpoint = 
   | 'resume-interview'
-  | 'jd-based-interview'
+  | 'job-discription-interview'
   | 'company-based-interview'
   | 'topic-based-interview';
 

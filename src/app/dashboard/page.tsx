@@ -105,12 +105,11 @@ const Dashboard = () => {
           },
         };
 
-        // Determine the correct API service based on interview type
+        // Determine the correct API service based on active tab
         let response;
-        const interviewType =
-          formData?.interviewType || interviewData.interviewType;
+        const interviewTab = activeTab; // Use activeTab from dashboard state
 
-        if (interviewType === "job-description") {
+        if (interviewTab === "job-description") {
           // Use job description API service
           const { JobDescriptionBasedInterviewApiService } = await import(
             "@/lib/api/interview-types"
@@ -119,7 +118,7 @@ const Dashboard = () => {
             await JobDescriptionBasedInterviewApiService.startInterview(
               interviewData as any
             );
-        } else if (interviewType === "company") {
+        } else if (interviewTab === "company") {
           // Use company API service
           const { CompanyBasedInterviewApiService } = await import(
             "@/lib/api/interview-types"
@@ -127,7 +126,7 @@ const Dashboard = () => {
           response = await CompanyBasedInterviewApiService.startInterview(
             interviewData as any
           );
-        } else if (interviewType === "topic") {
+        } else if (interviewTab === "topic") {
           // Use topic API service
           const { TopicBasedInterviewApiService } = await import(
             "@/lib/api/interview-types"
@@ -144,16 +143,14 @@ const Dashboard = () => {
 
         // Navigate to interview page with real interview ID
         router.push(
-          `/interview?interviewId=${interviewId}&type=${interviewData.interviewType}`
+          `/interview?interviewId=${interviewId}&type=${interviewTab}`
         );
       } catch (error) {
         console.error("Error starting interview:", error);
         // Fallback to mock ID if API fails
         const mockInterviewId = `mock-${Date.now()}`;
         router.push(
-          `/interview?interviewId=${mockInterviewId}&type=${
-            formData?.interviewType || "resume"
-          }`
+          `/interview?interviewId=${mockInterviewId}&type=${activeTab}`
         );
       }
     };
