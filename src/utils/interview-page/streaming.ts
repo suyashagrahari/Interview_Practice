@@ -5,6 +5,12 @@ export const streamText = async (
   onUpdate: (currentText: string) => void,
   wordDelay: number = INTERVIEW_CONSTANTS.STREAMING.WORD_DELAY
 ): Promise<void> => {
+  // Validate input parameters
+  if (!text || typeof text !== 'string') {
+    console.error('streamText: Invalid text provided:', text);
+    return;
+  }
+
   const words = text.split(" ");
   for (let i = 0; i <= words.length; i++) {
     onUpdate(words.slice(0, i).join(" "));
@@ -19,6 +25,17 @@ export const streamQuestionToChat = async (
   setChatMessages: (messages: any[] | ((prev: any[]) => any[])) => void,
   getCurrentTimestamp: () => string
 ): Promise<void> => {
+  // Validate input parameters
+  if (!questionText || typeof questionText !== 'string') {
+    console.error('streamQuestionToChat: Invalid questionText provided:', questionText);
+    return;
+  }
+
+  if (!questionId || typeof questionId !== 'string') {
+    console.error('streamQuestionToChat: Invalid questionId provided:', questionId);
+    return;
+  }
+
   // Create a temporary message for streaming in chat
   const tempMessageId = `temp-${Date.now()}`;
   const tempMessage = {

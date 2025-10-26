@@ -20,6 +20,12 @@ import {
 import { InterviewApiService, Interview } from "@/lib/api/interview";
 import { InterviewerApiService, Interviewer } from "@/lib/api/interviewer";
 import {
+  JobDescriptionBasedInterviewApiService,
+  ResumeInterviewApiService,
+  CompanyBasedInterviewApiService,
+  TopicBasedInterviewApiService,
+} from "@/lib/api/interview-types";
+import {
   restoreInterviewState,
   hasActiveSession,
 } from "@/lib/interview-persistence";
@@ -50,10 +56,39 @@ import {
 } from "@/hooks/interview-page";
 
 // Import constants and types
-import { INTERVIEW_CONSTANTS, DEFAULT_AVATAR, WARNING_THRESHOLDS } from "@/constants/interview-page/interview.constants";
-import type { CVViolations, CVDetectionPoint, QuestionData, AvatarData, AudioData } from "@/types/interview-page/interview.types";
-import { streamText, streamQuestionToChat } from "@/utils/interview-page/streaming";
+import {
+  INTERVIEW_CONSTANTS,
+  DEFAULT_AVATAR,
+  WARNING_THRESHOLDS,
+} from "@/constants/interview-page/interview.constants";
+import type {
+  CVViolations,
+  CVDetectionPoint,
+  QuestionData,
+  AvatarData,
+  AudioData,
+} from "@/types/interview-page/interview.types";
+import {
+  streamText,
+  streamQuestionToChat,
+} from "@/utils/interview-page/streaming";
 import { customScrollbarStyles } from "@/styles/interview-practice";
+
+// Helper function to get the correct API service based on interview type
+const getInterviewApiService = (interviewType: string) => {
+  switch (interviewType) {
+    case "job-description":
+      return JobDescriptionBasedInterviewApiService;
+    case "resume":
+      return ResumeInterviewApiService;
+    case "company":
+      return CompanyBasedInterviewApiService;
+    case "topic":
+      return TopicBasedInterviewApiService;
+    default:
+      return ResumeInterviewApiService; // fallback to resume service as it has all methods
+  }
+};
 
 const InterviewPage = () => {
   const router = useRouter();
@@ -68,27 +103,38 @@ const InterviewPage = () => {
   // Interview state
   const [isGuidelinesModalOpen, setIsGuidelinesModalOpen] = useState(true);
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
-  const [permissionsGrantedInGuidelines, setPermissionsGrantedInGuidelines] = useState(false);
+  const [permissionsGrantedInGuidelines, setPermissionsGrantedInGuidelines] =
+    useState(false);
   const [error, setError] = useState<string | null>(null);
   const [interviewType, setInterviewType] = useState("");
   const [interviewId, setInterviewId] = useState<string | null>(null);
   const [interviewData, setInterviewData] = useState<Interview | null>(null);
   const [isLoadingInterviewData, setIsLoadingInterviewData] = useState(false);
-  const [isInterviewDetailsModalOpen, setIsInterviewDetailsModalOpen] = useState(false);
-  const [interviewerData, setInterviewerData] = useState<Interviewer | null>(null);
-  const [isLoadingInterviewerData, setIsLoadingInterviewerData] = useState(false);
-  const [isInterviewerDetailsModalOpen, setIsInterviewerDetailsModalOpen] = useState(false);
+  const [isInterviewDetailsModalOpen, setIsInterviewDetailsModalOpen] =
+    useState(false);
+  const [interviewerData, setInterviewerData] = useState<Interviewer | null>(
+    null
+  );
+  const [isLoadingInterviewerData, setIsLoadingInterviewerData] =
+    useState(false);
+  const [isInterviewerDetailsModalOpen, setIsInterviewerDetailsModalOpen] =
+    useState(false);
 
   // Question state
-  const [currentQuestion, setCurrentQuestion] = useState<InterviewQuestion | null>(null);
+  const [currentQuestion, setCurrentQuestion] =
+    useState<InterviewQuestion | null>(null);
   const [questionNumber, setQuestionNumber] = useState(1);
   const [isGeneratingQuestion, setIsGeneratingQuestion] = useState(false);
   const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
-  const [answerAnalysis, setAnswerAnalysis] = useState<AnswerAnalysis | null>(null);
-  const [pendingNextQuestion, setPendingNextQuestion] = useState<InterviewQuestion | null>(null);
+  const [answerAnalysis, setAnswerAnalysis] = useState<AnswerAnalysis | null>(
+    null
+  );
+  const [pendingNextQuestion, setPendingNextQuestion] =
+    useState<InterviewQuestion | null>(null);
   const [currentQuestionData, setCurrentQuestionData] = useState<QuestionData>({
     question: "Can you explain the concept of closures in JavaScript?",
-    answer: "A closure is a function that has access to variables in its outer (enclosing) scope even after the outer function has returned. Closures are created every time a function is created, at function creation time. They allow for data privacy and the creation of function factories.",
+    answer:
+      "A closure is a function that has access to variables in its outer (enclosing) scope even after the outer function has returned. Closures are created every time a function is created, at function creation time. They allow for data privacy and the creation of function factories.",
   });
 
   // Answer state
@@ -107,7 +153,8 @@ const InterviewPage = () => {
   const [showHint, setShowHint] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
-  const [selectedAvatar, setSelectedAvatar] = useState<AvatarData>(DEFAULT_AVATAR);
+  const [selectedAvatar, setSelectedAvatar] =
+    useState<AvatarData>(DEFAULT_AVATAR);
   const [showSubtitles, setShowSubtitles] = useState(false);
   const [networkStatus, setNetworkStatus] = useState<string>("checking");
 
@@ -141,10 +188,16 @@ const InterviewPage = () => {
     handleToggleVideo,
   } = useCameraManagement();
 
-  const { chatMessages, setChatMessages, chatMessagesRef, addMessageToChat, getCurrentTimestamp } =
-    useInterviewChat();
+  const {
+    chatMessages,
+    setChatMessages,
+    chatMessagesRef,
+    addMessageToChat,
+    getCurrentTimestamp,
+  } = useInterviewChat();
 
-  const { saveCurrentState, autoSaveState, clearInterviewLocalStorage } = useInterviewPersistence();
+  const { saveCurrentState, autoSaveState, clearInterviewLocalStorage } =
+    useInterviewPersistence();
 
   const {
     warningStatus,
@@ -190,7 +243,9 @@ const InterviewPage = () => {
   const [interimTranscript, setInterimTranscript] = useState("");
   const [finalTranscript, setFinalTranscript] = useState("");
   const [speechText, setSpeechText] = useState("");
-  const [speechRecognitionError, setSpeechRecognitionError] = useState<string | null>(null);
+  const [speechRecognitionError, setSpeechRecognitionError] = useState<
+    string | null
+  >(null);
 
   // Proctoring
   const {
@@ -210,11 +265,14 @@ const InterviewPage = () => {
     }
 
     autoEndCalledRef.current = true;
-    console.log("⏰ Auto-ending interview (time expired or 18 questions reached)");
+    console.log(
+      "⏰ Auto-ending interview (time expired or 18 questions reached)"
+    );
 
     if (interviewId) {
       try {
-        await interviewRealtimeApi.endInterview(interviewId);
+        const apiService = getInterviewApiService(interviewType);
+        await apiService.endInterview(interviewId);
         clearInterviewLocalStorage(interviewId);
         stopProctoring();
         toast.success("Interview completed successfully!");
@@ -230,7 +288,13 @@ const InterviewPage = () => {
       stopProctoring();
       router.push("/dashboard?interviewCompleted=true");
     }
-  }, [interviewId, router, stopProctoring, clearInterviewLocalStorage]);
+  }, [
+    interviewId,
+    interviewType,
+    router,
+    stopProctoring,
+    clearInterviewLocalStorage,
+  ]);
 
   // Timer hook - using the callback defined above
   const {
@@ -265,8 +329,11 @@ const InterviewPage = () => {
     totalViolations: 0,
     violations: [],
   });
-  const [persistentCheatingDetected, setPersistentCheatingDetected] = useState(false);
-  const [cvDetectionPoints, setCvDetectionPoints] = useState<CVDetectionPoint[]>([]);
+  const [persistentCheatingDetected, setPersistentCheatingDetected] =
+    useState(false);
+  const [cvDetectionPoints, setCvDetectionPoints] = useState<
+    CVDetectionPoint[]
+  >([]);
 
   // WebSocket Interview Handler
   const {
@@ -298,7 +365,13 @@ const InterviewPage = () => {
     },
     onError: (error) => {
       console.error("❌ WebSocket error:", error);
-      setError(error.message);
+      console.error("❌ WebSocket error details:", {
+        message: error.message,
+        code: error.code,
+        details: (error as any).details,
+        fullError: error,
+      });
+      setError(error.message || "An error occurred during the interview");
       setIsGeneratingQuestion(false);
       setIsSubmittingAnswer(false);
       setIsAnalyzing(false);
@@ -308,8 +381,48 @@ const InterviewPage = () => {
 
   // ============== HANDLER FUNCTIONS ==============
 
-  async function handleQuestionReceived(question: InterviewQuestion, questionNumber: number, audio: any) {
-    console.log("📥 Question received via WebSocket:", question, "Audio:", audio);
+  async function handleQuestionReceived(
+    question: InterviewQuestion,
+    questionNumber: number,
+    audio: any
+  ) {
+    console.log(
+      "📥 Question received via WebSocket:",
+      question,
+      "Audio:",
+      audio
+    );
+
+    console.log("🔍 DEBUG: Question received details:", {
+      question: question
+        ? {
+            questionId: question.questionId,
+            question: question.question
+              ? question.question.substring(0, 100) + "..."
+              : "UNDEFINED",
+            category: question.category,
+            difficulty: question.difficulty,
+            type: typeof question.question,
+            length: question.question ? question.question.length : 0,
+          }
+        : "UNDEFINED",
+      questionNumber,
+      audio: audio
+        ? {
+            hasAudio: true,
+            fileName: audio.fileName,
+            mimeType: audio.mimeType,
+            hasBase64: !!audio.audioBase64,
+          }
+        : "NO_AUDIO",
+    });
+
+    // Validate question data
+    if (!question || !question.question || !question.questionId) {
+      console.error("❌ Invalid question data received:", question);
+      return;
+    }
+
     setCurrentQuestion(question);
     setQuestionNumber(questionNumber);
     setUserAnswer("");
@@ -355,8 +468,14 @@ const InterviewPage = () => {
       setWarningStatus(newWarningStatus);
 
       if (typeof window !== "undefined") {
-        localStorage.setItem("interview-warning-status", JSON.stringify(newWarningStatus));
-        localStorage.setItem("interview-warning-count", data.warningCount.toString());
+        localStorage.setItem(
+          "interview-warning-status",
+          JSON.stringify(newWarningStatus)
+        );
+        localStorage.setItem(
+          "interview-warning-count",
+          data.warningCount.toString()
+        );
       }
 
       setWarningData({
@@ -380,9 +499,15 @@ const InterviewPage = () => {
     isLoadingFromBackendRef.current = true;
 
     if (data.warningCount !== undefined) {
-      setWarningStatus((prev) => ({ ...prev, warningCount: data.warningCount }));
+      setWarningStatus((prev) => ({
+        ...prev,
+        warningCount: data.warningCount,
+      }));
       if (typeof window !== "undefined") {
-        localStorage.setItem("interview-warning-count", data.warningCount.toString());
+        localStorage.setItem(
+          "interview-warning-count",
+          data.warningCount.toString()
+        );
       }
     }
 
@@ -394,7 +519,10 @@ const InterviewPage = () => {
       setTabSwitchCount(data.proctoringData.tabSwitches || 0);
 
       if (typeof window !== "undefined") {
-        localStorage.setItem("interview-tab-switch-count", (data.proctoringData.tabSwitches || 0).toString());
+        localStorage.setItem(
+          "interview-tab-switch-count",
+          (data.proctoringData.tabSwitches || 0).toString()
+        );
       }
 
       console.log("✅ Proctoring data updated from backend:", {
@@ -415,7 +543,8 @@ const InterviewPage = () => {
 
         if (interviewId) {
           try {
-            await interviewRealtimeApi.endInterview(interviewId);
+            const apiService = getInterviewApiService(interviewType);
+            await apiService.endInterview(interviewId);
             console.log("✅ Terminated interview ended successfully via API");
           } catch (error) {
             console.error("❌ Error ending terminated interview:", error);
@@ -429,11 +558,17 @@ const InterviewPage = () => {
       }
 
       if (interviewId) {
-        console.log("🛑 Ending interview via API...", interviewId);
+        console.log(
+          "🛑 Ending interview via API...",
+          interviewId,
+          "Type:",
+          interviewType
+        );
         setIsGeneratingQuestion(true);
 
         try {
-          const response = await interviewRealtimeApi.endInterview(interviewId);
+          const apiService = getInterviewApiService(interviewType);
+          const response = await apiService.endInterview(interviewId);
           console.log("✅ Interview ended successfully via API:", response);
 
           clearInterviewLocalStorage(interviewId);
@@ -442,7 +577,8 @@ const InterviewPage = () => {
           router.push("/dashboard?interviewCompleted=true");
         } catch (error) {
           console.error("❌ Error ending interview:", error);
-          const errorMessage = "Failed to end interview properly, but you can still exit.";
+          const errorMessage =
+            "Failed to end interview properly, but you can still exit.";
           setError(errorMessage);
           toast.error(errorMessage);
 
@@ -456,7 +592,9 @@ const InterviewPage = () => {
           setIsGeneratingQuestion(false);
         }
       } else {
-        console.log("⚠️ No interview ID found, clearing localStorage and redirecting...");
+        console.log(
+          "⚠️ No interview ID found, clearing localStorage and redirecting..."
+        );
         clearInterviewLocalStorage(interviewId);
         stopProctoring();
         router.push("/dashboard?interviewCompleted=true");
@@ -489,7 +627,12 @@ const InterviewPage = () => {
       }
 
       const answerText = userAnswer;
-      addMessageToChat("user", answerText, currentQuestion.questionId, answerText);
+      addMessageToChat(
+        "user",
+        answerText,
+        currentQuestion.questionId,
+        answerText
+      );
       setUserAnswer("");
 
       submitAnswerWS(currentQuestion.questionId, answerText, {
@@ -542,7 +685,9 @@ const InterviewPage = () => {
       console.log("🎤 Starting interview session with auto-restart");
       await startSpeechInterviewSession();
     } else {
-      console.log("🎤 Speech recognition not supported, recording without transcription");
+      console.log(
+        "🎤 Speech recognition not supported, recording without transcription"
+      );
     }
   };
 
@@ -568,14 +713,43 @@ const InterviewPage = () => {
       subtitleTimerRef.current = null;
     }
 
-    console.log("🎤 Interview session stopped, transcript preserved in text area:", currentSessionTranscript);
+    console.log(
+      "🎤 Interview session stopped, transcript preserved in text area:",
+      currentSessionTranscript
+    );
   };
 
-  const streamQuestionToBoth = async (questionText: string, questionId: string) => {
+  const streamQuestionToBoth = async (
+    questionText: string,
+    questionId: string
+  ) => {
+    // Validate input parameters
+    if (!questionText || typeof questionText !== "string") {
+      console.error(
+        "streamQuestionToBoth: Invalid questionText provided:",
+        questionText
+      );
+      return;
+    }
+
+    if (!questionId || typeof questionId !== "string") {
+      console.error(
+        "streamQuestionToBoth: Invalid questionId provided:",
+        questionId
+      );
+      return;
+    }
+
     setIsStreaming(true);
     setStreamingText("");
 
-    await streamQuestionToChat(questionText, questionId, chatMessages, setChatMessages, getCurrentTimestamp);
+    await streamQuestionToChat(
+      questionText,
+      questionId,
+      chatMessages,
+      setChatMessages,
+      getCurrentTimestamp
+    );
 
     setIsStreaming(false);
   };
@@ -619,7 +793,10 @@ const InterviewPage = () => {
                 question: data.data.question,
                 answer: data.data.expectedAnswer,
               });
-              console.log("✅ AI Copilot hint loaded for question:", currentQuestionId);
+              console.log(
+                "✅ AI Copilot hint loaded for question:",
+                currentQuestionId
+              );
             } else {
               console.error("⚠️ Question mismatch:", {
                 requested: currentQuestionId,
@@ -671,8 +848,14 @@ const InterviewPage = () => {
     if (violations.length > 0) {
       console.log("\n🚨 VIOLATION DETECTIONS:");
       violations.forEach((point, index) => {
-        console.log(`${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${point.violationType}`);
-        console.log(`   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`);
+        console.log(
+          `${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${
+            point.violationType
+          }`
+        );
+        console.log(
+          `   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`
+        );
       });
     }
 
@@ -680,8 +863,12 @@ const InterviewPage = () => {
     const recentPoints = cvDetectionPoints.slice(-10);
     recentPoints.forEach((point, index) => {
       const status = point.violation ? "🚨 VIOLATION" : "✅ NORMAL";
-      console.log(`${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${status}`);
-      console.log(`   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`);
+      console.log(
+        `${index + 1}. [${point.timestamp.toLocaleTimeString()}] ${status}`
+      );
+      console.log(
+        `   - People: ${point.peopleCount}, Devices: ${point.phoneCount}`
+      );
       if (point.violationType) {
         console.log(`   - Type: ${point.violationType}`);
       }
@@ -765,7 +952,9 @@ const InterviewPage = () => {
     setTimeRemaining(INTERVIEW_CONSTANTS.TIMER.INITIAL_TIME);
 
     if (permissionsGrantedInGuidelines) {
-      console.log("🎥 Starting camera immediately (permissions already granted)");
+      console.log(
+        "🎥 Starting camera immediately (permissions already granted)"
+      );
       setCameraPermission("granted");
       await requestCameraPermission(true);
     }
@@ -794,7 +983,9 @@ const InterviewPage = () => {
         await generateFirstQuestion(interviewIdParam);
       } else {
         console.error("No interview ID provided. Cannot start interview.");
-        setError("No interview ID provided. Please start the interview from the dashboard.");
+        setError(
+          "No interview ID provided. Please start the interview from the dashboard."
+        );
       }
     } catch (error) {
       console.error("Error starting interview:", error);
@@ -808,13 +999,20 @@ const InterviewPage = () => {
 
   const generateFirstQuestion = async (interviewId: string) => {
     try {
-      console.log("🎯 Generating first question via WebSocket for interview:", interviewId);
+      console.log(
+        "🎯 Generating first question via WebSocket for interview:",
+        interviewId
+      );
 
       let attempts = 0;
       const maxAttempts = 10;
 
       while (!isSocketConnected && attempts < maxAttempts) {
-        console.warn(`⚠️ WebSocket not connected, waiting... (attempt ${attempts + 1}/${maxAttempts})`);
+        console.warn(
+          `⚠️ WebSocket not connected, waiting... (attempt ${
+            attempts + 1
+          }/${maxAttempts})`
+        );
         if (attempts === 0) {
           toast.info("Connecting to server...");
         }
@@ -823,7 +1021,9 @@ const InterviewPage = () => {
       }
 
       if (!isSocketConnected) {
-        throw new Error("Failed to connect to server. Please check your connection.");
+        throw new Error(
+          "Failed to connect to server. Please check your connection."
+        );
       }
 
       console.log("✅ WebSocket connected, requesting first question...");
@@ -840,28 +1040,37 @@ const InterviewPage = () => {
     }
   };
 
-  const fetchInterviewData = useCallback(async (id: string) => {
-    if (!id) return;
+  const fetchInterviewData = useCallback(
+    async (id: string) => {
+      if (!id) return;
 
-    setIsLoadingInterviewData(true);
-    try {
-      console.log("📊 Fetching interview data for ID:", id);
-      const response = await InterviewApiService.getInterviewById(id);
-      if (response.success && response.data) {
-        setInterviewData(response.data);
-        console.log("✅ Interview data loaded");
-      } else {
-        console.warn("⚠️ No interview data found for ID:", id);
+      setIsLoadingInterviewData(true);
+      try {
+        console.log(
+          "📊 Fetching interview data for ID:",
+          id,
+          "Type:",
+          interviewType
+        );
+        const apiService = getInterviewApiService(interviewType);
+        const response = await apiService.getInterviewById(id);
+        if (response.success && response.data) {
+          setInterviewData(response.data);
+          console.log("✅ Interview data loaded");
+        } else {
+          console.warn("⚠️ No interview data found for ID:", id);
+          setInterviewData(null);
+        }
+      } catch (error) {
+        console.error("❌ Failed to fetch interview data:", error);
+        toast.error("Failed to load interview details");
         setInterviewData(null);
+      } finally {
+        setIsLoadingInterviewData(false);
       }
-    } catch (error) {
-      console.error("❌ Failed to fetch interview data:", error);
-      toast.error("Failed to load interview details");
-      setInterviewData(null);
-    } finally {
-      setIsLoadingInterviewData(false);
-    }
-  }, []);
+    },
+    [interviewType]
+  );
 
   const fetchInterviewerData = useCallback(async (id: string) => {
     if (!id) return;
@@ -958,7 +1167,10 @@ const InterviewPage = () => {
       setFinalTranscript("");
       resetSpeechTranscript();
 
-      await streamQuestionToBoth(pendingNextQuestion.question, pendingNextQuestion.questionId);
+      await streamQuestionToBoth(
+        pendingNextQuestion.question,
+        pendingNextQuestion.questionId
+      );
 
       if (!isProctoring) {
         startProctoring();
@@ -994,32 +1206,49 @@ const InterviewPage = () => {
       if (timeRemaining <= 0) {
         console.log("⏰ Interview session expired, clearing state");
         clearInterviewLocalStorage(interviewIdParam);
-        toast.error("Interview session has expired. Please start a new interview.");
+        toast.error(
+          "Interview session has expired. Please start a new interview."
+        );
         return;
       }
 
       if (restoredState.interviewId) setInterviewId(restoredState.interviewId);
-      if (restoredState.interviewType) setInterviewType(restoredState.interviewType);
+      if (restoredState.interviewType)
+        setInterviewType(restoredState.interviewType);
       if (restoredState.isInterviewStarted) {
         setIsInterviewStarted(restoredState.isInterviewStarted);
         setIsGuidelinesModalOpen(false);
       }
-      if (restoredState.interviewStartTime) setInterviewStartTime(restoredState.interviewStartTime);
-      if (restoredState.timeRemaining !== undefined) setTimeRemaining(restoredState.timeRemaining);
-      if (restoredState.currentQuestion) setCurrentQuestion(restoredState.currentQuestion);
-      if (restoredState.questionNumber) setQuestionNumber(restoredState.questionNumber);
-      if (restoredState.chatMessages) setChatMessages(restoredState.chatMessages);
+      if (restoredState.interviewStartTime)
+        setInterviewStartTime(restoredState.interviewStartTime);
+      if (restoredState.timeRemaining !== undefined)
+        setTimeRemaining(restoredState.timeRemaining);
+      if (restoredState.currentQuestion)
+        setCurrentQuestion(restoredState.currentQuestion);
+      if (restoredState.questionNumber)
+        setQuestionNumber(restoredState.questionNumber);
+      if (restoredState.chatMessages)
+        setChatMessages(restoredState.chatMessages);
       if (restoredState.userAnswer) setUserAnswer(restoredState.userAnswer);
       if (restoredState.warningCount !== undefined) {
-        setWarningStatus((prev) => ({ ...prev, warningCount: restoredState.warningCount || 0 }));
+        setWarningStatus((prev) => ({
+          ...prev,
+          warningCount: restoredState.warningCount || 0,
+        }));
         if (typeof window !== "undefined") {
-          localStorage.setItem("interview-warning-count", (restoredState.warningCount || 0).toString());
+          localStorage.setItem(
+            "interview-warning-count",
+            (restoredState.warningCount || 0).toString()
+          );
         }
       }
       if (restoredState.warningStatus) {
         setWarningStatus(restoredState.warningStatus);
         if (typeof window !== "undefined") {
-          localStorage.setItem("interview-warning-status", JSON.stringify(restoredState.warningStatus));
+          localStorage.setItem(
+            "interview-warning-status",
+            JSON.stringify(restoredState.warningStatus)
+          );
         }
       }
 
@@ -1027,7 +1256,9 @@ const InterviewPage = () => {
 
       console.log("✅ Interview state restored successfully");
       toast.success(
-        `Interview resumed from question ${restoredState.questionNumber}. Time remaining: ${Math.floor(
+        `Interview resumed from question ${
+          restoredState.questionNumber
+        }. Time remaining: ${Math.floor(
           (restoredState.timeRemaining || 0) / 60
         )} minutes`
       );
@@ -1057,17 +1288,24 @@ const InterviewPage = () => {
   // Check for existing cheating detection status
   useEffect(() => {
     if (interviewId) {
-      const savedCheatingStatus = localStorage.getItem(`cheating-detected-${interviewId}`);
+      const savedCheatingStatus = localStorage.getItem(
+        `cheating-detected-${interviewId}`
+      );
       if (savedCheatingStatus === "true") {
         setPersistentCheatingDetected(true);
-        console.log(`[PROCTORING] Cheating detection status restored for interview ${interviewId}`);
+        console.log(
+          `[PROCTORING] Cheating detection status restored for interview ${interviewId}`
+        );
       }
     }
   }, [interviewId]);
 
   // Update computer vision violations
   useEffect(() => {
-    if (cvStats.multiplePersonIncidents > 0 && cvStats.multiplePersonIncidents !== cvViolations.multiplePersonIncidents) {
+    if (
+      cvStats.multiplePersonIncidents > 0 &&
+      cvStats.multiplePersonIncidents !== cvViolations.multiplePersonIncidents
+    ) {
       setCvViolations((prev) => ({
         ...prev,
         multiplePersonIncidents: cvStats.multiplePersonIncidents,
@@ -1083,7 +1321,10 @@ const InterviewPage = () => {
       }));
     }
 
-    if (cvStats.phoneDetections > 0 && cvStats.phoneDetections !== cvViolations.phoneDetections) {
+    if (
+      cvStats.phoneDetections > 0 &&
+      cvStats.phoneDetections !== cvViolations.phoneDetections
+    ) {
       setCvViolations((prev) => ({
         ...prev,
         phoneDetections: cvStats.phoneDetections,
@@ -1103,7 +1344,8 @@ const InterviewPage = () => {
   // Store CV detection points
   useEffect(() => {
     if (isInterviewStarted && isCVModelLoaded) {
-      const hasViolation = cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
+      const hasViolation =
+        cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
       let violationType = "";
 
       if (cvStats.currentPeople > 1 && cvStats.currentPhones > 0) {
@@ -1127,20 +1369,34 @@ const InterviewPage = () => {
         return newPoints.slice(-100);
       });
     }
-  }, [cvStats.currentPeople, cvStats.currentPhones, isInterviewStarted, isCVModelLoaded]);
+  }, [
+    cvStats.currentPeople,
+    cvStats.currentPhones,
+    isInterviewStarted,
+    isCVModelLoaded,
+  ]);
 
   // Update persistent cheating status
   useEffect(() => {
     if (isInterviewStarted && interviewId) {
-      const currentCheatingDetected = cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
+      const currentCheatingDetected =
+        cvStats.currentPeople > 1 || cvStats.currentPhones > 0;
 
       if (currentCheatingDetected && !persistentCheatingDetected) {
         setPersistentCheatingDetected(true);
         localStorage.setItem(`cheating-detected-${interviewId}`, "true");
-        console.log(`[PROCTORING] Cheating detected and saved for interview ${interviewId}`);
+        console.log(
+          `[PROCTORING] Cheating detected and saved for interview ${interviewId}`
+        );
       }
     }
-  }, [cvStats.currentPeople, cvStats.currentPhones, isInterviewStarted, interviewId, persistentCheatingDetected]);
+  }, [
+    cvStats.currentPeople,
+    cvStats.currentPhones,
+    isInterviewStarted,
+    interviewId,
+    persistentCheatingDetected,
+  ]);
 
   // Ensure video element gets the stream
   useEffect(() => {
@@ -1163,12 +1419,20 @@ const InterviewPage = () => {
         setIsVideoOn(true);
       }
     }
-  }, [cameraStream, isVideoOn, safeVideoPlay, isCVModelLoaded, initializeComputerVision]);
+  }, [
+    cameraStream,
+    isVideoOn,
+    safeVideoPlay,
+    isCVModelLoaded,
+    initializeComputerVision,
+  ]);
 
   // Ensure video is displayed when interview starts
   useEffect(() => {
     if (isInterviewStarted && cameraStream && videoRef.current) {
-      console.log("🎥 Interview started with camera stream - ensuring video display");
+      console.log(
+        "🎥 Interview started with camera stream - ensuring video display"
+      );
       videoRef.current.srcObject = cameraStream;
       setIsVideoOn(true);
       safeVideoPlay(videoRef.current);
@@ -1179,7 +1443,13 @@ const InterviewPage = () => {
         cvInitializedRef.current = true;
       }
     }
-  }, [isInterviewStarted, cameraStream, safeVideoPlay, isCVModelLoaded, initializeComputerVision]);
+  }, [
+    isInterviewStarted,
+    cameraStream,
+    safeVideoPlay,
+    isCVModelLoaded,
+    initializeComputerVision,
+  ]);
 
   // Handle speech recognition updates
   useEffect(() => {
@@ -1240,7 +1510,12 @@ const InterviewPage = () => {
       return;
     }
 
-    if (isSocketConnected && interviewId && isInterviewStarted && proctoringData) {
+    if (
+      isSocketConnected &&
+      interviewId &&
+      isInterviewStarted &&
+      proctoringData
+    ) {
       const debounceTimeout = setTimeout(() => {
         console.log("🔄 Syncing proctoring data to backend...", {
           tabSwitches: proctoringData.tabSwitches,
@@ -1374,7 +1649,10 @@ const InterviewPage = () => {
           setWarningShownForCurrentCount(false);
 
           if (typeof window !== "undefined") {
-            localStorage.setItem("interview-tab-switch-count", newCount.toString());
+            localStorage.setItem(
+              "interview-tab-switch-count",
+              newCount.toString()
+            );
           }
 
           return newCount;
@@ -1384,7 +1662,8 @@ const InterviewPage = () => {
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
-      e.returnValue = "Are you sure you want to leave? Your interview will be cancelled.";
+      e.returnValue =
+        "Are you sure you want to leave? Your interview will be cancelled.";
       return "Are you sure you want to leave? Your interview will be cancelled.";
     };
 
@@ -1399,10 +1678,17 @@ const InterviewPage = () => {
 
   // Handle modal display when user returns to tab
   useEffect(() => {
-    if (tabSwitchCount === WARNING_THRESHOLDS.TAB_SWITCH_WARNING && isInterviewStarted && !warningShownForCurrentCount) {
+    if (
+      tabSwitchCount === WARNING_THRESHOLDS.TAB_SWITCH_WARNING &&
+      isInterviewStarted &&
+      !warningShownForCurrentCount
+    ) {
       setShowTabSwitchModal(true);
       setWarningShownForCurrentCount(true);
-    } else if (tabSwitchCount >= WARNING_THRESHOLDS.TAB_SWITCH_TERMINATE && isInterviewStarted) {
+    } else if (
+      tabSwitchCount >= WARNING_THRESHOLDS.TAB_SWITCH_TERMINATE &&
+      isInterviewStarted
+    ) {
       // Tab switch ending is disabled for now
       // handleEndInterview(); // DISABLED FOR NOW
     }
@@ -1429,7 +1715,8 @@ const InterviewPage = () => {
       if (isInterviewStarted && interviewId) {
         saveCurrentStateData();
 
-        const message = "Your interview progress will be saved. Are you sure you want to leave?";
+        const message =
+          "Your interview progress will be saved. Are you sure you want to leave?";
         e.preventDefault();
         e.returnValue = message;
         return message;
@@ -1437,7 +1724,11 @@ const InterviewPage = () => {
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden" && isInterviewStarted && interviewId) {
+      if (
+        document.visibilityState === "hidden" &&
+        isInterviewStarted &&
+        interviewId
+      ) {
         saveCurrentStateData();
       }
     };
@@ -1460,8 +1751,12 @@ const InterviewPage = () => {
           <div className="w-16 h-16 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Loading Interview</h2>
-          <p className="text-gray-600 dark:text-gray-300">Please wait while we prepare your interview...</p>
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+            Loading Interview
+          </h2>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please wait while we prepare your interview...
+          </p>
         </div>
       </div>
     );
@@ -1485,9 +1780,17 @@ const InterviewPage = () => {
           onPermissionsGranted={handlePermissionsGranted}
         />
 
-        <InitialWarningModal isOpen={showInitialWarningModal} onClose={handleInitialWarningComplete} />
+        <InitialWarningModal
+          isOpen={showInitialWarningModal}
+          onClose={handleInitialWarningComplete}
+        />
 
-        <WarningModal isOpen={showWarningModal} onClose={handleWarningModalClose} warningData={warningData} warningStatus={warningStatus} />
+        <WarningModal
+          isOpen={showWarningModal}
+          onClose={handleWarningModalClose}
+          warningData={warningData}
+          warningStatus={warningStatus}
+        />
 
         <TabSwitchModal
           isOpen={showTabSwitchModal}
@@ -1573,7 +1876,9 @@ const InterviewPage = () => {
                   isInterviewStarted={isInterviewStarted}
                   interviewerData={interviewerData}
                   isLoadingInterviewerData={isLoadingInterviewerData}
-                  onInterviewerClick={() => setIsInterviewerDetailsModalOpen(true)}
+                  onInterviewerClick={() =>
+                    setIsInterviewerDetailsModalOpen(true)
+                  }
                   isSpeechInitializing={isSpeechInitializing}
                   onStartRecording={handleStartRecording}
                   onStopRecording={handleStopRecording}

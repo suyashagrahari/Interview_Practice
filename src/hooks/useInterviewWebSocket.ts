@@ -93,6 +93,18 @@ export const useInterviewWebSocket = ({
     // Question events
     newSocket.on('question:first', (response) => {
       console.log('🎯 First question received:', response);
+      console.log('🔍 DEBUG: Question data details:', {
+        success: response.success,
+        hasData: !!response.data,
+        question: response.data?.question ? {
+          questionId: response.data.question.questionId,
+          question: response.data.question.question ? response.data.question.question.substring(0, 100) + "..." : "UNDEFINED",
+          category: response.data.question.category
+        } : "UNDEFINED",
+        questionNumber: response.data?.questionNumber,
+        hasAudio: !!response.data?.audio,
+        fullResponse: response
+      });
       if (response.success && response.data) {
         onQuestionReceived(response.data.question, response.data.questionNumber, response.data.audio);
       }
@@ -115,6 +127,12 @@ export const useInterviewWebSocket = ({
 
     newSocket.on('question:error', (error) => {
       console.error('❌ Question error:', error);
+      console.error('❌ Question error details:', {
+        message: error.message,
+        code: error.code,
+        details: (error as any).details,
+        fullError: error
+      });
       onError(error);
       setIsGenerating(false);
     });
