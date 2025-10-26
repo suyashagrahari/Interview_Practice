@@ -91,6 +91,7 @@ export const UploadTopicQuestions: React.FC<UploadTopicQuestionsProps> = ({
         topicName: q.topicName,
         experienceLevel: q.experienceLevel,
         difficultyLevel: q.difficultyLevel,
+        questionType: q.questionType || "technical",
         questionText: q.questionText,
         expectedAnswer: q.expectedAnswer,
         keywords: q.keywords,

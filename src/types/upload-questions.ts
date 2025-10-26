@@ -11,7 +11,7 @@ export type DifficultyLevel = "beginner" | "intermediate" | "expert";
 /**
  * Question type options
  */
-export type QuestionType = "Code" | "SystemDesign" | "Normal";
+export type QuestionType = "technical" | "behavioral" | "coding" | "systemDesign" | "normal";
 
 /**
  * Question data structure
@@ -21,6 +21,7 @@ export interface QuestionData {
   topicName: string;
   experienceLevel: ExperienceLevel;
   difficultyLevel: DifficultyLevel;
+  questionType?: QuestionType;
   questionText: string;
   expectedAnswer: string;
   keywords: string[];
@@ -34,6 +35,7 @@ export interface QuestionFormData {
   topicName: string;
   experienceLevel: ExperienceLevel;
   difficultyLevel: DifficultyLevel;
+  questionType?: QuestionType;
   questionText: string;
   expectedAnswer: string;
   keywords: string[];

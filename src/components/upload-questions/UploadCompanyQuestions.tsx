@@ -126,7 +126,7 @@ export const UploadCompanyQuestions: React.FC<UploadCompanyQuestionsProps> = ({
         jobRole: q.jobRole,
         experienceLevel: q.experienceLevel,
         difficultyLevel: q.difficultyLevel,
-        questionType: q.questionType,
+        questionType: q.questionType || "technical",
         questionText: q.questionText,
         expectedAnswer: q.expectedAnswer,
         keywords: q.keywords,

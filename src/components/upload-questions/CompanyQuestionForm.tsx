@@ -40,9 +40,11 @@ const DIFFICULTY_LEVELS: { value: DifficultyLevel; label: string }[] = [
 ];
 
 const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
-  { value: "Normal", label: "Normal" },
-  { value: "Code", label: "Code" },
-  { value: "SystemDesign", label: "System Design" },
+  { value: "technical", label: "Technical Question" },
+  { value: "behavioral", label: "Behavioral Question" },
+  { value: "coding", label: "Coding Question" },
+  { value: "systemDesign", label: "System Design Question" },
+  { value: "normal", label: "Normal Question" },
 ];
 
 export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
@@ -62,7 +64,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
     jobRole: "",
     experienceLevel: "0-2",
     difficultyLevel: "beginner",
-    questionType: "Normal",
+    questionType: "technical",
     questionText: "",
     expectedAnswer: "",
     keywords: [],
@@ -88,7 +90,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
         jobRole: "",
         experienceLevel: "0-2",
         difficultyLevel: "beginner",
-        questionType: "Normal",
+        questionType: "technical",
         questionText: "",
         expectedAnswer: "",
         keywords: [],

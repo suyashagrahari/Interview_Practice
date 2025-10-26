@@ -1009,8 +1009,17 @@ const ResumeInterview = ({
                             <option value="technical">
                               Technical Interview
                             </option>
-                            <option value="behavioral">
-                              Behavioral Interview
+                            <option value="behavioral" disabled>
+                              Behavioral Interview (Coming Soon)
+                            </option>
+                            <option value="coding" disabled>
+                              Coding Interview (Coming Soon)
+                            </option>
+                            <option value="systemDesign" disabled>
+                              System Design (Coming Soon)
+                            </option>
+                            <option value="mixed" disabled>
+                              Mixed Interview (Coming Soon)
                             </option>
                           </select>
                         </div>

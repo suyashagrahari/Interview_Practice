@@ -8,6 +8,7 @@ import {
   QuestionData,
   ExperienceLevel,
   DifficultyLevel,
+  QuestionType,
 } from "@/types/upload-questions";
 import { Title } from "@/lib/api/titles";
 
@@ -35,6 +36,14 @@ const DIFFICULTY_LEVELS: { value: DifficultyLevel; label: string }[] = [
   { value: "expert", label: "Expert" },
 ];
 
+const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "technical", label: "Technical Question" },
+  { value: "behavioral", label: "Behavioral Question" },
+  { value: "coding", label: "Coding Question" },
+  { value: "systemDesign", label: "System Design Question" },
+  { value: "normal", label: "Normal Question" },
+];
+
 export const QuestionForm: React.FC<QuestionFormProps> = ({
   onSubmit,
   editingQuestion,
@@ -48,6 +57,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
     topicName: "",
     experienceLevel: "0-2",
     difficultyLevel: "beginner",
+    questionType: "technical",
     questionText: "",
     expectedAnswer: "",
     keywords: [],
@@ -61,6 +71,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
         topicName: editingQuestion.topicName,
         experienceLevel: editingQuestion.experienceLevel,
         difficultyLevel: editingQuestion.difficultyLevel,
+        questionType: editingQuestion.questionType || "technical",
         questionText: editingQuestion.questionText,
         expectedAnswer: editingQuestion.expectedAnswer,
         keywords: editingQuestion.keywords,
@@ -70,6 +81,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
         topicName: "",
         experienceLevel: "0-2",
         difficultyLevel: "beginner",
+        questionType: "technical",
         questionText: "",
         expectedAnswer: "",
         keywords: [],
@@ -83,7 +95,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
 
   const handleSelectChange = (
     field: keyof QuestionFormData,
-    value: ExperienceLevel | DifficultyLevel
+    value: ExperienceLevel | DifficultyLevel | QuestionType
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -118,6 +130,7 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
           topicName: "",
           experienceLevel: "0-2",
           difficultyLevel: "beginner",
+          questionType: "technical",
           questionText: "",
           expectedAnswer: "",
           keywords: [],
@@ -249,6 +262,28 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Question Type */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
+              Question Type
+            </label>
+            <select
+              value={formData.questionType || "technical"}
+              onChange={(e) =>
+                handleSelectChange(
+                  "questionType",
+                  e.target.value as QuestionType
+                )
+              }
+              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white transition-all cursor-pointer">
+              {QUESTION_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Question Text */}
