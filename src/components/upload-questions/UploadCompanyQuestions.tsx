@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTheme } from "@/contexts/theme-context";
 import { CompanyQuestionForm } from "./CompanyQuestionForm";
@@ -10,6 +10,13 @@ import {
   CompanyQuestionData,
   CompanyQuestionFormData,
 } from "@/types/upload-questions";
+import {
+  CompanyTitleApiService,
+  JobTitleApiService,
+  Title,
+} from "@/lib/api/titles";
+import { CompanyQuestionApiService } from "@/lib/api/company-questions";
+import { toast } from "@/utils/toast";
 
 interface UploadCompanyQuestionsProps {
   onClose?: () => void;
@@ -23,6 +30,59 @@ export const UploadCompanyQuestions: React.FC<UploadCompanyQuestionsProps> = ({
   const [editingQuestion, setEditingQuestion] =
     useState<CompanyQuestionData | null>(null);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const [companies, setCompanies] = useState<Title[]>([]);
+  const [isLoadingCompanies, setIsLoadingCompanies] = useState(true);
+  const [companiesError, setCompaniesError] = useState<string | null>(null);
+  const [jobTitles, setJobTitles] = useState<Title[]>([]);
+  const [isLoadingJobTitles, setIsLoadingJobTitles] = useState(true);
+  const [jobTitlesError, setJobTitlesError] = useState<string | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  // Fetch companies from API
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      try {
+        setIsLoadingCompanies(true);
+        setCompaniesError(null);
+        const response = await CompanyTitleApiService.getTitles({
+          limit: 1000,
+        });
+        setCompanies(response.data.titles);
+      } catch (error) {
+        console.error("Error fetching companies:", error);
+        setCompaniesError(
+          error instanceof Error ? error.message : "Failed to fetch companies"
+        );
+      } finally {
+        setIsLoadingCompanies(false);
+      }
+    };
+
+    fetchCompanies();
+  }, []);
+
+  // Fetch job titles from API
+  useEffect(() => {
+    const fetchJobTitles = async () => {
+      try {
+        setIsLoadingJobTitles(true);
+        setJobTitlesError(null);
+        const response = await JobTitleApiService.getTitles({
+          limit: 1000,
+        });
+        setJobTitles(response.data.titles);
+      } catch (error) {
+        console.error("Error fetching job titles:", error);
+        setJobTitlesError(
+          error instanceof Error ? error.message : "Failed to fetch job titles"
+        );
+      } finally {
+        setIsLoadingJobTitles(false);
+      }
+    };
+
+    fetchJobTitles();
+  }, []);
 
   const handleAddQuestion = (formData: CompanyQuestionFormData) => {
     const newQuestion: CompanyQuestionData = {
@@ -51,12 +111,50 @@ export const UploadCompanyQuestions: React.FC<UploadCompanyQuestionsProps> = ({
     setQuestions((prev) => prev.filter((q) => q.id !== questionId));
   };
 
-  const handlePublish = async () => {
-    // Here you would typically send the data to your backend API
-    console.log("Publishing company questions:", questions);
-    setIsPublishModalOpen(false);
-    // Reset form after successful publish
-    setQuestions([]);
+  const handlePublish = async (selectedQuestions: CompanyQuestionData[]) => {
+    if (selectedQuestions.length === 0) {
+      toast.error("Please select at least one question to publish");
+      return;
+    }
+
+    try {
+      setIsPublishing(true);
+
+      // Transform questions to match API payload
+      const questionsToPublish = selectedQuestions.map((q) => ({
+        companyName: q.companyName,
+        jobRole: q.jobRole,
+        experienceLevel: q.experienceLevel,
+        difficultyLevel: q.difficultyLevel,
+        questionType: q.questionType,
+        questionText: q.questionText,
+        expectedAnswer: q.expectedAnswer,
+        keywords: q.keywords,
+        createdAt: q.createdAt,
+      }));
+
+      // Upload questions to backend
+      const response = await CompanyQuestionApiService.uploadQuestions({
+        questions: questionsToPublish,
+      });
+
+      toast.success(
+        `Successfully published ${response.data.totalQuestions} question(s) to ${response.data.companies.length} company(s)`
+      );
+
+      // Close modal and reset form
+      setIsPublishModalOpen(false);
+      setQuestions([]);
+    } catch (error) {
+      console.error("Error publishing company questions:", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to publish questions. Please try again."
+      );
+    } finally {
+      setIsPublishing(false);
+    }
   };
 
   const handleCancelPublish = () => {
@@ -97,22 +195,26 @@ export const UploadCompanyQuestions: React.FC<UploadCompanyQuestionsProps> = ({
           </div>
           <button
             onClick={() => setIsPublishModalOpen(true)}
-            disabled={questions.length === 0}
+            disabled={questions.length === 0 || isPublishing}
             className="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5">
             <span className="flex items-center gap-1.5">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-              Publish ({questions.length})
+              {isPublishing ? (
+                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+              ) : (
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
+                </svg>
+              )}
+              {isPublishing ? "Publishing..." : `Publish (${questions.length})`}
             </span>
           </button>
         </div>
@@ -127,6 +229,12 @@ export const UploadCompanyQuestions: React.FC<UploadCompanyQuestionsProps> = ({
             editingQuestion={editingQuestion}
             onCancelEdit={() => setEditingQuestion(null)}
             isDarkMode={isDarkMode}
+            companies={companies}
+            isLoadingCompanies={isLoadingCompanies}
+            companiesError={companiesError}
+            jobTitles={jobTitles}
+            isLoadingJobTitles={isLoadingJobTitles}
+            jobTitlesError={jobTitlesError}
           />
         </div>
 

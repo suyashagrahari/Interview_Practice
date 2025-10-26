@@ -16,7 +16,7 @@ import { CompanyQuestionData } from "@/types/upload-questions";
 interface CompanyPublishModalProps {
   isOpen: boolean;
   questions: CompanyQuestionData[];
-  onPublish: () => void;
+  onPublish: (selectedQuestions: CompanyQuestionData[]) => void;
   onCancel: () => void;
   isDarkMode: boolean;
 }
@@ -290,7 +290,7 @@ export const CompanyPublishModal: React.FC<CompanyPublishModalProps> = ({
                 Cancel
               </button>
               <button
-                onClick={onPublish}
+                onClick={() => onPublish(selectedQuestionsData)}
                 disabled={selectedQuestionsData.length === 0}
                 className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors duration-200">
                 Publish ({selectedQuestionsData.length})

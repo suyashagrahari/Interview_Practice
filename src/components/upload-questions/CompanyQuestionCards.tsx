@@ -48,6 +48,19 @@ export const CompanyQuestionCards: React.FC<CompanyQuestionCardsProps> = ({
     }
   };
 
+  const getQuestionTypeColor = (type: string) => {
+    switch (type) {
+      case "Code":
+        return "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300";
+      case "SystemDesign":
+        return "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-300";
+      case "Normal":
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-300";
+    }
+  };
+
   if (questions.length === 0) {
     return (
       <div className="h-full flex items-center justify-center bg-white/80 dark:bg-slate-800/80 backdrop-blur-md rounded-2xl border border-gray-200/20 dark:border-white/10 shadow-xl">
@@ -126,7 +139,7 @@ export const CompanyQuestionCards: React.FC<CompanyQuestionCardsProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5 mb-2 ml-5">
+              <div className="flex items-center gap-1.5 mb-2 ml-5 flex-wrap">
                 <span
                   className={`px-2 py-0.5 rounded-lg text-xs font-semibold border ${getExperienceColor(
                     question.experienceLevel
@@ -138,6 +151,12 @@ export const CompanyQuestionCards: React.FC<CompanyQuestionCardsProps> = ({
                     question.difficultyLevel
                   )}`}>
                   {question.difficultyLevel}
+                </span>
+                <span
+                  className={`px-2 py-0.5 rounded-lg text-xs font-semibold border ${getQuestionTypeColor(
+                    question.questionType
+                  )}`}>
+                  {question.questionType}
                 </span>
               </div>
 

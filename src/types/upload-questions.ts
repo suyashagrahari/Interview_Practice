@@ -9,6 +9,11 @@ export type ExperienceLevel = "0-2" | "3-4" | "5-6" | "7-8" | "9-10";
 export type DifficultyLevel = "beginner" | "intermediate" | "expert";
 
 /**
+ * Question type options
+ */
+export type QuestionType = "Code" | "SystemDesign" | "Normal";
+
+/**
  * Question data structure
  */
 export interface QuestionData {
@@ -43,6 +48,7 @@ export interface CompanyQuestionData {
   jobRole: string;
   experienceLevel: ExperienceLevel;
   difficultyLevel: DifficultyLevel;
+  questionType: QuestionType;
   questionText: string;
   expectedAnswer: string;
   keywords: string[];
@@ -57,6 +63,7 @@ export interface CompanyQuestionFormData {
   jobRole: string;
   experienceLevel: ExperienceLevel;
   difficultyLevel: DifficultyLevel;
+  questionType: QuestionType;
   questionText: string;
   expectedAnswer: string;
   keywords: string[];

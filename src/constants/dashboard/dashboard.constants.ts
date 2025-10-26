@@ -9,6 +9,7 @@ import {
   Users,
   Target,
   Upload,
+  FileTextIcon,
 } from "lucide-react";
 import { InterviewType } from "@/types/dashboard";
 
@@ -69,6 +70,12 @@ export const MAIN_NAVIGATION_ITEMS = [
     label: "Upload Company Questions",
     icon: Building,
     path: "/dashboard/upload-company-questions",
+  },
+  {
+    id: "upload-title",
+    label: "Upload Title",
+    icon: FileTextIcon,
+    path: "/dashboard/upload-title",
   },
   {
     id: "history",

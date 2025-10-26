@@ -9,12 +9,16 @@ import {
   ExperienceLevel,
   DifficultyLevel,
 } from "@/types/upload-questions";
+import { Title } from "@/lib/api/titles";
 
 interface QuestionFormProps {
   onSubmit: (data: QuestionFormData) => void;
   editingQuestion: QuestionData | null;
   onCancelEdit: () => void;
   isDarkMode: boolean;
+  topics: Title[];
+  isLoadingTopics: boolean;
+  topicsError: string | null;
 }
 
 const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [
@@ -36,6 +40,9 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
   editingQuestion,
   onCancelEdit,
   isDarkMode,
+  topics,
+  isLoadingTopics,
+  topicsError,
 }) => {
   const [formData, setFormData] = useState<QuestionFormData>({
     topicName: "",
@@ -166,16 +173,37 @@ export const QuestionForm: React.FC<QuestionFormProps> = ({
           {/* Topic Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
-              Topic Name
+              Select Topic
             </label>
-            <input
-              type="text"
-              value={formData.topicName}
-              onChange={(e) => handleInputChange("topicName", e.target.value)}
-              placeholder="Enter topic name"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"
-              required
-            />
+            {isLoadingTopics ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  Loading topics...
+                </span>
+              </div>
+            ) : topicsError ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-red-300 dark:border-red-600 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
+                {topicsError}
+              </div>
+            ) : topics.length === 0 ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 text-gray-500 dark:text-gray-400">
+                No topics available
+              </div>
+            ) : (
+              <select
+                value={formData.topicName}
+                onChange={(e) => handleInputChange("topicName", e.target.value)}
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white transition-all cursor-pointer"
+                required>
+                <option value="">-- Select a topic --</option>
+                {topics.map((topic) => (
+                  <option key={topic._id || topic.id} value={topic.text}>
+                    {topic.text}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Experience and Difficulty Level */}

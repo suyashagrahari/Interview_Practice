@@ -8,13 +8,21 @@ import {
   CompanyQuestionData,
   ExperienceLevel,
   DifficultyLevel,
+  QuestionType,
 } from "@/types/upload-questions";
+import { Title } from "@/lib/api/titles";
 
 interface CompanyQuestionFormProps {
   onSubmit: (data: CompanyQuestionFormData) => void;
   editingQuestion: CompanyQuestionData | null;
   onCancelEdit: () => void;
   isDarkMode: boolean;
+  companies: Title[];
+  isLoadingCompanies: boolean;
+  companiesError: string | null;
+  jobTitles: Title[];
+  isLoadingJobTitles: boolean;
+  jobTitlesError: string | null;
 }
 
 const EXPERIENCE_LEVELS: { value: ExperienceLevel; label: string }[] = [
@@ -31,17 +39,30 @@ const DIFFICULTY_LEVELS: { value: DifficultyLevel; label: string }[] = [
   { value: "expert", label: "Expert" },
 ];
 
+const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
+  { value: "Normal", label: "Normal" },
+  { value: "Code", label: "Code" },
+  { value: "SystemDesign", label: "System Design" },
+];
+
 export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
   onSubmit,
   editingQuestion,
   onCancelEdit,
   isDarkMode,
+  companies,
+  isLoadingCompanies,
+  companiesError,
+  jobTitles,
+  isLoadingJobTitles,
+  jobTitlesError,
 }) => {
   const [formData, setFormData] = useState<CompanyQuestionFormData>({
     companyName: "",
     jobRole: "",
     experienceLevel: "0-2",
     difficultyLevel: "beginner",
+    questionType: "Normal",
     questionText: "",
     expectedAnswer: "",
     keywords: [],
@@ -56,6 +77,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
         jobRole: editingQuestion.jobRole,
         experienceLevel: editingQuestion.experienceLevel,
         difficultyLevel: editingQuestion.difficultyLevel,
+        questionType: editingQuestion.questionType,
         questionText: editingQuestion.questionText,
         expectedAnswer: editingQuestion.expectedAnswer,
         keywords: editingQuestion.keywords,
@@ -66,6 +88,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
         jobRole: "",
         experienceLevel: "0-2",
         difficultyLevel: "beginner",
+        questionType: "Normal",
         questionText: "",
         expectedAnswer: "",
         keywords: [],
@@ -82,7 +105,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
 
   const handleSelectChange = (
     field: keyof CompanyQuestionFormData,
-    value: ExperienceLevel | DifficultyLevel
+    value: ExperienceLevel | DifficultyLevel | QuestionType
   ) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -119,6 +142,7 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
           jobRole: "",
           experienceLevel: "0-2",
           difficultyLevel: "beginner",
+          questionType: "Normal",
           questionText: "",
           expectedAnswer: "",
           keywords: [],
@@ -175,35 +199,81 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
           {/* Company Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
-              Company Name
+              Select Company
             </label>
-            <input
-              type="text"
-              value={formData.companyName}
-              onChange={(e) => handleInputChange("companyName", e.target.value)}
-              placeholder="Enter company name"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"
-              required
-            />
+            {isLoadingCompanies ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  Loading companies...
+                </span>
+              </div>
+            ) : companiesError ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-red-300 dark:border-red-600 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
+                {companiesError}
+              </div>
+            ) : companies.length === 0 ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 text-gray-500 dark:text-gray-400">
+                No companies available
+              </div>
+            ) : (
+              <select
+                value={formData.companyName}
+                onChange={(e) =>
+                  handleInputChange("companyName", e.target.value)
+                }
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white transition-all cursor-pointer"
+                required>
+                <option value="">-- Select a company --</option>
+                {companies.map((company) => (
+                  <option key={company._id || company.id} value={company.text}>
+                    {company.text}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {/* Job Role */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
-              Job Role
+              Select Job Role
             </label>
-            <input
-              type="text"
-              value={formData.jobRole}
-              onChange={(e) => handleInputChange("jobRole", e.target.value)}
-              placeholder="Enter job role"
-              className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 transition-all"
-              required
-            />
+            {isLoadingJobTitles ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 flex items-center gap-2">
+                <div className="animate-spin w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span className="text-gray-600 dark:text-gray-400">
+                  Loading job roles...
+                </span>
+              </div>
+            ) : jobTitlesError ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-red-300 dark:border-red-600 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400">
+                {jobTitlesError}
+              </div>
+            ) : jobTitles.length === 0 ? (
+              <div className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl bg-white dark:bg-slate-700/50 text-gray-500 dark:text-gray-400">
+                No job roles available
+              </div>
+            ) : (
+              <select
+                value={formData.jobRole}
+                onChange={(e) => handleInputChange("jobRole", e.target.value)}
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white transition-all cursor-pointer"
+                required>
+                <option value="">-- Select a job role --</option>
+                {jobTitles.map((jobTitle) => (
+                  <option
+                    key={jobTitle._id || jobTitle.id}
+                    value={jobTitle.text}>
+                    {jobTitle.text}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
-          {/* Experience and Difficulty Level */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Experience, Difficulty Level, and Question Type */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
                 Experience
@@ -241,6 +311,27 @@ export const CompanyQuestionForm: React.FC<CompanyQuestionFormProps> = ({
                 {DIFFICULTY_LEVELS.map((level) => (
                   <option key={level.value} value={level.value}>
                     {level.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 uppercase tracking-wide">
+                Question Type
+              </label>
+              <select
+                value={formData.questionType}
+                onChange={(e) =>
+                  handleSelectChange(
+                    "questionType",
+                    e.target.value as QuestionType
+                  )
+                }
+                className="w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-700/50 text-gray-900 dark:text-white transition-all cursor-pointer">
+                {QUESTION_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
                   </option>
                 ))}
               </select>

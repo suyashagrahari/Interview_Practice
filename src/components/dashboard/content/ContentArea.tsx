@@ -8,6 +8,7 @@ import CompanyBasedInterview from "@/components/interview/company-based-intervie
 import {
   UploadTopicQuestions,
   UploadCompanyQuestions,
+  UploadTitle,
 } from "@/components/upload-questions";
 import { ANIMATION_VARIANTS } from "@/constants/dashboard";
 import { ContentView, InterviewTab } from "@/types/dashboard";
@@ -75,6 +76,16 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               transition={ANIMATION_VARIANTS.content.transition}
               className="h-full">
               <UploadCompanyQuestions />
+            </motion.div>
+          ) : contentView === "upload-title" ? (
+            <motion.div
+              key="upload-title"
+              initial={ANIMATION_VARIANTS.content.initial}
+              animate={ANIMATION_VARIANTS.content.animate}
+              exit={ANIMATION_VARIANTS.content.exit}
+              transition={ANIMATION_VARIANTS.content.transition}
+              className="h-full">
+              <UploadTitle />
             </motion.div>
           ) : (
             <motion.div

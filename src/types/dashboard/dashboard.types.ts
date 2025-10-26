@@ -121,7 +121,7 @@ export interface SidebarState {
 /**
  * Content view type
  */
-export type ContentView = "interview" | "profile" | "settings" | "analytics" | "upload-questions" | "upload-company-questions";
+export type ContentView = "interview" | "profile" | "settings" | "analytics" | "upload-questions" | "upload-company-questions" | "upload-title";
 
 /**
  * Tab type for interview selection
