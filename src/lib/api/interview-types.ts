@@ -53,7 +53,7 @@ const getApiEndpoint = (interviewType: InterviewType): InterviewApiEndpoint => {
     case 'company':
       return 'company-based-interview';
     case 'topic':
-      return 'topic-based-interview';
+      return 'topic-interview';
     default:
       throw new Error(`Unsupported interview type: ${interviewType}`);
   }

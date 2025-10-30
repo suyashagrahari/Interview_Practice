@@ -126,11 +126,11 @@ export type InterviewResponse =
   | TopicBasedInterviewResponse;
 
 // API endpoint types
-export type InterviewApiEndpoint = 
+export type InterviewApiEndpoint =
   | 'resume-interview'
   | 'job-description-interview'
   | 'company-based-interview'
-  | 'topic-based-interview';
+  | 'topic-interview';
 
 // Helper type to get the correct request type based on interview type
 export type GetInterviewRequest<T extends InterviewType> = 

@@ -40,7 +40,6 @@ const TopicBasedInterview = ({
 
   const [formData, setFormData] = useState({
     topic: "",
-    subtopic: "",
     difficultyLevel: "intermediate",
     interviewType: "technical",
     experienceLevel: "0-2",
@@ -95,105 +94,6 @@ const TopicBasedInterview = ({
     fetchTopicTitles();
   }, []);
 
-  const subtopics = {
-    JavaScript: [
-      "ES6+ Features",
-      "Async/Await",
-      "Closures",
-      "Prototypes",
-      "Event Loop",
-      "Promises",
-    ],
-    React: [
-      "Hooks",
-      "State Management",
-      "Component Lifecycle",
-      "Virtual DOM",
-      "Performance Optimization",
-      "Testing",
-    ],
-    "Node.js": [
-      "Event Loop",
-      "Streams",
-      "Middleware",
-      "Error Handling",
-      "Security",
-      "Performance",
-    ],
-    Python: [
-      "Data Types",
-      "OOP Concepts",
-      "Decorators",
-      "Generators",
-      "Async Programming",
-      "Testing",
-    ],
-    "Data Structures": [
-      "Arrays",
-      "Linked Lists",
-      "Trees",
-      "Graphs",
-      "Hash Tables",
-      "Stacks & Queues",
-    ],
-    Algorithms: [
-      "Sorting",
-      "Searching",
-      "Dynamic Programming",
-      "Greedy Algorithms",
-      "Graph Algorithms",
-      "Time Complexity",
-    ],
-    "System Design": [
-      "Scalability",
-      "Load Balancing",
-      "Caching",
-      "Database Design",
-      "Microservices",
-      "API Design",
-    ],
-    "Database Design": [
-      "Normalization",
-      "Indexing",
-      "Query Optimization",
-      "ACID Properties",
-      "NoSQL vs SQL",
-      "Transactions",
-    ],
-    "Machine Learning": [
-      "Supervised Learning",
-      "Unsupervised Learning",
-      "Neural Networks",
-      "Feature Engineering",
-      "Model Evaluation",
-      "Deep Learning",
-    ],
-    DevOps: [
-      "CI/CD",
-      "Containerization",
-      "Orchestration",
-      "Infrastructure as Code",
-      "Monitoring",
-      "Security",
-    ],
-    "Cloud Computing": [
-      "AWS Services",
-      "Azure Services",
-      "GCP Services",
-      "Serverless",
-      "Auto Scaling",
-      "Cost Optimization",
-    ],
-    Cybersecurity: [
-      "Network Security",
-      "Application Security",
-      "Cryptography",
-      "Vulnerability Assessment",
-      "Incident Response",
-      "Compliance",
-    ],
-  };
-
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({
       ...prev,
@@ -207,13 +107,12 @@ const TopicBasedInterview = ({
       // Prepare interview data from form
       const interviewData = {
         topic: formData.topic,
-        subtopic: formData.subtopic,
+        topicName: formData.topic,
         interviewType: "topic",
         interviewerId: formData.interviewerId,
         difficultyLevel: formData.difficultyLevel,
         experienceLevel: formData.experienceLevel,
         interviewFormat: formData.interviewType,
-        duration: formData.duration,
       };
       onStartInterview(interviewData);
       return;
@@ -430,7 +329,6 @@ const TopicBasedInterview = ({
                           value={formData.topic}
                           onChange={(e) => {
                             handleInputChange("topic", e.target.value);
-                            handleInputChange("subtopic", ""); // Reset subtopic
                           }}
                           disabled={isLoadingTopics}
                           className={`w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
@@ -451,30 +349,6 @@ const TopicBasedInterview = ({
                         </select>
                       </div>
 
-                      {formData.topic &&
-                        subtopics[formData.topic as keyof typeof subtopics] && (
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Subtopic (Optional)
-                            </label>
-                            <select
-                              value={formData.subtopic}
-                              onChange={(e) =>
-                                handleInputChange("subtopic", e.target.value)
-                              }
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                              <option value="">Select a subtopic</option>
-                              {subtopics[
-                                formData.topic as keyof typeof subtopics
-                              ].map((subtopic) => (
-                                <option key={subtopic} value={subtopic}>
-                                  {subtopic}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-
                       <div className="p-4 bg-blue-50 dark:bg-blue-500/20 rounded-lg">
                         <div className="flex items-start space-x-2">
                           <Lightbulb className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -484,11 +358,7 @@ const TopicBasedInterview = ({
                             </p>
                             <p className="text-xs text-blue-700 dark:text-blue-300">
                               {formData.topic
-                                ? `Questions will focus on ${formData.topic}${
-                                    formData.subtopic
-                                      ? ` - ${formData.subtopic}`
-                                      : ""
-                                  }`
+                                ? `Questions will focus on ${formData.topic}`
                                 : "Select a topic to see what questions will focus on"}
                             </p>
                           </div>
@@ -787,7 +657,6 @@ const TopicBasedInterview = ({
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Topic: {formData.topic}
-                          {formData.subtopic && ` - ${formData.subtopic}`}
                         </p>
                       </div>
 
@@ -851,10 +720,8 @@ const TopicBasedInterview = ({
                             AI Interviewer
                           </div>
                           <div className="text-xs text-blue-800 dark:text-blue-200">
-                            Hello! Let's discuss {formData.topic}
-                            {formData.subtopic &&
-                              `, specifically ${formData.subtopic}`}
-                            . Tell me what you know about this topic.
+                            Hello! Let's discuss {formData.topic}. Tell me what
+                            you know about this topic.
                           </div>
                         </div>
                         <div className="p-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">
