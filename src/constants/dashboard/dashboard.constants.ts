@@ -78,6 +78,12 @@ export const MAIN_NAVIGATION_ITEMS = [
     path: "/dashboard/upload-title",
   },
   {
+    id: "cover-letter",
+    label: "Cover Letter",
+    icon: FileText,
+    path: "/dashboard/cover-letter",
+  },
+  {
     id: "history",
     label: "Interview History",
     icon: MessageSquare,

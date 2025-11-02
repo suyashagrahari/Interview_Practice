@@ -41,6 +41,10 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
       onChangeContentView("upload-title");
       return;
     }
+    if (id === "cover-letter") {
+      onChangeContentView("cover-letter");
+      return;
+    }
     router.push(path);
   };
 

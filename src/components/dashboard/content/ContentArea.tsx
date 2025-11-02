@@ -11,6 +11,7 @@ import {
   UploadTitle,
 } from "@/components/upload-questions";
 import { ANIMATION_VARIANTS } from "@/constants/dashboard";
+import CoverLetterGenerator from "@/components/cover-letter/CoverLetterGenerator";
 import { ContentView, InterviewTab } from "@/types/dashboard";
 
 interface ContentAreaProps {
@@ -86,6 +87,16 @@ export const ContentArea: React.FC<ContentAreaProps> = ({
               transition={ANIMATION_VARIANTS.content.transition}
               className="h-full">
               <UploadTitle />
+            </motion.div>
+          ) : contentView === "cover-letter" ? (
+            <motion.div
+              key="cover-letter"
+              initial={ANIMATION_VARIANTS.content.initial}
+              animate={ANIMATION_VARIANTS.content.animate}
+              exit={ANIMATION_VARIANTS.content.exit}
+              transition={ANIMATION_VARIANTS.content.transition}
+              className="h-full">
+              <CoverLetterGenerator />
             </motion.div>
           ) : (
             <motion.div
