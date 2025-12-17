@@ -163,7 +163,7 @@ export interface GoogleAuthRequest {
   credential: string;
 }
 
-export interface ApiError {
+export interface AuthApiError {
   success: false;
   message: string;
   errors?: Record<string, string[]>;

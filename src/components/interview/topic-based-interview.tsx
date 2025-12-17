@@ -17,6 +17,8 @@ import {
   clearInterviewState,
 } from "@/lib/interview-persistence";
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
+import { useInterviewers } from "@/hooks/useInterviewers";
+import { TopicTitleApiService } from "@/lib/api/titles";
 
 interface TopicBasedInterviewProps {
   onBack?: () => void;
@@ -38,9 +40,9 @@ const TopicBasedInterview = ({
 
   const [formData, setFormData] = useState({
     topic: "",
-    subtopic: "",
     difficultyLevel: "intermediate",
     interviewType: "technical",
+    experienceLevel: "0-2",
     duration: "30",
     scheduled: false,
     scheduledDate: "",
@@ -48,167 +50,49 @@ const TopicBasedInterview = ({
     interviewerId: "",
   });
 
-  const topics = [
-    "JavaScript",
-    "React",
-    "Node.js",
-    "Python",
-    "Data Structures",
-    "Algorithms",
-    "System Design",
-    "Database Design",
-    "Machine Learning",
-    "DevOps",
-    "Cloud Computing",
-    "Cybersecurity",
-  ];
+  // Fetch topic titles from API
+  const [topics, setTopics] = useState<string[]>([]);
+  const [isLoadingTopics, setIsLoadingTopics] = useState(false);
 
-  const subtopics = {
-    JavaScript: [
-      "ES6+ Features",
-      "Async/Await",
-      "Closures",
-      "Prototypes",
-      "Event Loop",
-      "Promises",
-    ],
-    React: [
-      "Hooks",
-      "State Management",
-      "Component Lifecycle",
-      "Virtual DOM",
-      "Performance Optimization",
-      "Testing",
-    ],
-    "Node.js": [
-      "Event Loop",
-      "Streams",
-      "Middleware",
-      "Error Handling",
-      "Security",
-      "Performance",
-    ],
-    Python: [
-      "Data Types",
-      "OOP Concepts",
-      "Decorators",
-      "Generators",
-      "Async Programming",
-      "Testing",
-    ],
-    "Data Structures": [
-      "Arrays",
-      "Linked Lists",
-      "Trees",
-      "Graphs",
-      "Hash Tables",
-      "Stacks & Queues",
-    ],
-    Algorithms: [
-      "Sorting",
-      "Searching",
-      "Dynamic Programming",
-      "Greedy Algorithms",
-      "Graph Algorithms",
-      "Time Complexity",
-    ],
-    "System Design": [
-      "Scalability",
-      "Load Balancing",
-      "Caching",
-      "Database Design",
-      "Microservices",
-      "API Design",
-    ],
-    "Database Design": [
-      "Normalization",
-      "Indexing",
-      "Query Optimization",
-      "ACID Properties",
-      "NoSQL vs SQL",
-      "Transactions",
-    ],
-    "Machine Learning": [
-      "Supervised Learning",
-      "Unsupervised Learning",
-      "Neural Networks",
-      "Feature Engineering",
-      "Model Evaluation",
-      "Deep Learning",
-    ],
-    DevOps: [
-      "CI/CD",
-      "Containerization",
-      "Orchestration",
-      "Infrastructure as Code",
-      "Monitoring",
-      "Security",
-    ],
-    "Cloud Computing": [
-      "AWS Services",
-      "Azure Services",
-      "GCP Services",
-      "Serverless",
-      "Auto Scaling",
-      "Cost Optimization",
-    ],
-    Cybersecurity: [
-      "Network Security",
-      "Application Security",
-      "Cryptography",
-      "Vulnerability Assessment",
-      "Incident Response",
-      "Compliance",
-    ],
-  };
+  // Fetch interviewers from API
+  const {
+    data: interviewers = [],
+    isLoading: isLoadingInterviewers,
+    error: interviewersError,
+  } = useInterviewers();
 
-  const interviewers = [
-    {
-      id: "1",
-      name: "Alex Chen",
-      role: "Senior Developer",
-      experience: "8+ years",
-      rating: "4.9",
-      avatar: "AC",
-      specialties: ["JavaScript", "React", "Node.js"],
-    },
-    {
-      id: "2",
-      name: "Maria Rodriguez",
-      role: "Tech Lead",
-      experience: "10+ years",
-      rating: "4.8",
-      avatar: "MR",
-      specialties: ["Python", "Machine Learning", "Data Science"],
-    },
-    {
-      id: "3",
-      name: "James Wilson",
-      role: "Principal Engineer",
-      experience: "12+ years",
-      rating: "4.9",
-      avatar: "JW",
-      specialties: ["System Design", "Architecture", "Scalability"],
-    },
-    {
-      id: "4",
-      name: "Sarah Kim",
-      role: "Senior Developer",
-      experience: "7+ years",
-      rating: "4.7",
-      avatar: "SK",
-      specialties: ["Algorithms", "Data Structures", "Competitive Programming"],
-    },
-    {
-      id: "5",
-      name: "David Park",
-      role: "DevOps Engineer",
-      experience: "6+ years",
-      rating: "4.6",
-      avatar: "DP",
-      specialties: ["DevOps", "Cloud", "Infrastructure"],
-    },
-  ];
+  // Fetch topic titles from API
+  useEffect(() => {
+    const fetchTopicTitles = async () => {
+      try {
+        setIsLoadingTopics(true);
+        const response = await TopicTitleApiService.getTitles({ limit: 1000 });
+        if (response.data && response.data.titles) {
+          const topicTitles = response.data.titles.map(
+            (title: any) => title.text
+          );
+          setTopics(topicTitles);
+        }
+      } catch (error) {
+        console.error("Error fetching topic titles:", error);
+        // Fallback to default topics
+        setTopics([
+          "JavaScript",
+          "React",
+          "Node.js",
+          "Python",
+          "Data Structures",
+          "Algorithms",
+          "System Design",
+          "Database Design",
+        ]);
+      } finally {
+        setIsLoadingTopics(false);
+      }
+    };
+
+    fetchTopicTitles();
+  }, []);
 
   const handleInputChange = (field: string, value: any) => {
     setFormData((prev) => ({
@@ -223,10 +107,12 @@ const TopicBasedInterview = ({
       // Prepare interview data from form
       const interviewData = {
         topic: formData.topic,
+        topicName: formData.topic,
         interviewType: "topic",
         interviewerId: formData.interviewerId,
         difficultyLevel: formData.difficultyLevel,
-        duration: formData.duration,
+        experienceLevel: formData.experienceLevel,
+        interviewFormat: formData.interviewType,
       };
       onStartInterview(interviewData);
       return;
@@ -443,10 +329,18 @@ const TopicBasedInterview = ({
                           value={formData.topic}
                           onChange={(e) => {
                             handleInputChange("topic", e.target.value);
-                            handleInputChange("subtopic", ""); // Reset subtopic
                           }}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                          <option value="">Select a topic</option>
+                          disabled={isLoadingTopics}
+                          className={`w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                            isLoadingTopics
+                              ? "opacity-50 cursor-not-allowed"
+                              : ""
+                          }`}>
+                          <option value="">
+                            {isLoadingTopics
+                              ? "Loading topics..."
+                              : "Select a topic"}
+                          </option>
                           {topics.map((topic) => (
                             <option key={topic} value={topic}>
                               {topic}
@@ -454,30 +348,6 @@ const TopicBasedInterview = ({
                           ))}
                         </select>
                       </div>
-
-                      {formData.topic &&
-                        subtopics[formData.topic as keyof typeof subtopics] && (
-                          <div>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              Subtopic (Optional)
-                            </label>
-                            <select
-                              value={formData.subtopic}
-                              onChange={(e) =>
-                                handleInputChange("subtopic", e.target.value)
-                              }
-                              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                              <option value="">Select a subtopic</option>
-                              {subtopics[
-                                formData.topic as keyof typeof subtopics
-                              ].map((subtopic) => (
-                                <option key={subtopic} value={subtopic}>
-                                  {subtopic}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
 
                       <div className="p-4 bg-blue-50 dark:bg-blue-500/20 rounded-lg">
                         <div className="flex items-start space-x-2">
@@ -488,11 +358,7 @@ const TopicBasedInterview = ({
                             </p>
                             <p className="text-xs text-blue-700 dark:text-blue-300">
                               {formData.topic
-                                ? `Questions will focus on ${formData.topic}${
-                                    formData.subtopic
-                                      ? ` - ${formData.subtopic}`
-                                      : ""
-                                  }`
+                                ? `Questions will focus on ${formData.topic}`
                                 : "Select a topic to see what questions will focus on"}
                             </p>
                           </div>
@@ -519,7 +385,6 @@ const TopicBasedInterview = ({
                             className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
                             <option value="beginner">Beginner</option>
                             <option value="intermediate">Intermediate</option>
-                            <option value="advanced">Advanced</option>
                             <option value="expert">Expert</option>
                           </select>
                         </div>
@@ -538,46 +403,39 @@ const TopicBasedInterview = ({
                             <option value="technical">
                               Technical Interview
                             </option>
-                            <option value="behavioral">
-                              Behavioral Interview
+                            <option value="behavioral" disabled>
+                              Behavioral Interview (Coming Soon)
                             </option>
-                            <option value="mixed">Mixed Interview</option>
-                            <option value="practical">
-                              Practical Interview
+                            <option value="coding" disabled>
+                              Coding Interview (Coming Soon)
+                            </option>
+                            <option value="systemDesign" disabled>
+                              System Design (Coming Soon)
+                            </option>
+                            <option value="mixed" disabled>
+                              Mixed Interview (Coming Soon)
                             </option>
                           </select>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Duration <span className="text-red-500">*</span>
-                          </label>
-                          <select
-                            value={formData.duration}
-                            onChange={(e) =>
-                              handleInputChange("duration", e.target.value)
-                            }
-                            className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                            <option value="15">15 minutes</option>
-                            <option value="30">30 minutes</option>
-                            <option value="45">45 minutes</option>
-                            <option value="60">60 minutes</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                            Question Count
-                          </label>
-                          <select className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
-                            <option value="5">5 Questions</option>
-                            <option value="8">8 Questions</option>
-                            <option value="10">10 Questions</option>
-                            <option value="12">12 Questions</option>
-                          </select>
-                        </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                          Experience Level{" "}
+                          <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={formData.experienceLevel}
+                          onChange={(e) =>
+                            handleInputChange("experienceLevel", e.target.value)
+                          }
+                          className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-white/20 rounded-lg bg-white dark:bg-white/5 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200">
+                          <option value="0-2">0-2 years</option>
+                          <option value="3-4">3-4 years</option>
+                          <option value="5-6">5-6 years</option>
+                          <option value="7-8">7-8 years</option>
+                          <option value="9-10">9-10 years</option>
+                        </select>
                       </div>
 
                       {/* Schedule Option */}
@@ -654,70 +512,99 @@ const TopicBasedInterview = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                    {interviewers.map((interviewer) => (
-                      <motion.button
-                        key={interviewer.id}
-                        onClick={() =>
-                          handleInputChange("interviewerId", interviewer.id)
-                        }
-                        className={`p-3 rounded-lg border-2 transition-all duration-200 text-left hover:scale-105 ${
-                          formData.interviewerId === interviewer.id
-                            ? "border-blue-500 bg-blue-50 dark:bg-blue-500/20 shadow-lg"
-                            : "border-gray-200 dark:border-white/20 hover:border-blue-300 dark:hover:border-blue-400"
-                        }`}
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}>
-                        <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm mx-auto mb-2">
-                          {interviewer.avatar}
-                        </div>
-                        <div className="text-center">
-                          <div className="font-medium text-gray-900 dark:text-white text-xs mb-1">
-                            {interviewer.name}
+                  {isLoadingInterviewers ? (
+                    <div className="flex items-center justify-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {interviewers.map((interviewer) => (
+                        <motion.button
+                          key={interviewer._id}
+                          onClick={() =>
+                            handleInputChange("interviewerId", interviewer._id)
+                          }
+                          className={`p-3 rounded-lg border-2 transition-all duration-200 text-left hover:scale-105 ${
+                            formData.interviewerId === interviewer._id
+                              ? "border-blue-500 bg-blue-50 dark:bg-blue-500/20 shadow-lg"
+                              : "border-gray-200 dark:border-white/20 hover:border-blue-300 dark:hover:border-blue-400"
+                          }`}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}>
+                          <div className="w-12 h-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-sm mx-auto mb-2">
+                            {interviewer.avatar ||
+                              interviewer.name.substring(0, 2).toUpperCase()}
                           </div>
-                          <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">
-                            {interviewer.role}
+                          <div className="text-center">
+                            <div className="font-medium text-gray-900 dark:text-white text-xs mb-1">
+                              {interviewer.name}
+                            </div>
+                            <div className="text-xs text-gray-600 dark:text-gray-300 mb-1">
+                              {interviewer.role}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
+                              {interviewer.experience}
+                            </div>
+                            <div className="flex items-center justify-center space-x-1 mb-1">
+                              <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />
+                              <span className="text-xs text-gray-600 dark:text-gray-300">
+                                {interviewer.rating || "N/A"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-blue-600 dark:text-blue-400 leading-tight">
+                              {interviewer.specialties
+                                ?.slice(0, 2)
+                                .join(", ") || ""}
+                              {interviewer.specialties?.length > 2 && "..."}
+                            </div>
                           </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                            {interviewer.experience}
-                          </div>
-                          <div className="flex items-center justify-center space-x-1 mb-1">
-                            <Star className="w-2.5 h-2.5 text-yellow-500 fill-yellow-500" />
-                            <span className="text-xs text-gray-600 dark:text-gray-300">
-                              {interviewer.rating}
-                            </span>
-                          </div>
-                          <div className="text-xs text-blue-600 dark:text-blue-400 leading-tight">
-                            {interviewer.specialties.slice(0, 2).join(", ")}
-                            {interviewer.specialties.length > 2 && "..."}
-                          </div>
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Start Interview Button */}
                 <div className="flex justify-center">
                   <motion.button
                     onClick={handleStartInterview}
-                    disabled={!formData.topic || !formData.interviewerId}
+                    disabled={
+                      !formData.topic ||
+                      !formData.interviewerId ||
+                      isLoadingInterviewers
+                    }
                     className={`px-6 py-3 rounded-lg font-semibold transition-all duration-200 flex items-center space-x-2 ${
-                      formData.topic && formData.interviewerId
+                      formData.topic &&
+                      formData.interviewerId &&
+                      !isLoadingInterviewers
                         ? "bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl"
                         : "bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed"
                     }`}
                     whileHover={{
                       scale:
-                        formData.topic && formData.interviewerId ? 1.05 : 1,
+                        formData.topic &&
+                        formData.interviewerId &&
+                        !isLoadingInterviewers
+                          ? 1.05
+                          : 1,
                     }}
                     whileTap={{
                       scale:
-                        formData.topic && formData.interviewerId ? 0.95 : 1,
+                        formData.topic &&
+                        formData.interviewerId &&
+                        !isLoadingInterviewers
+                          ? 0.95
+                          : 1,
                     }}>
-                    <Play className="w-5 h-5" />
+                    {isLoadingInterviewers ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    ) : (
+                      <Play className="w-5 h-5" />
+                    )}
                     <span className="text-base">
-                      {formData.scheduled
+                      {isLoadingInterviewers
+                        ? "Loading..."
+                        : formData.scheduled
                         ? "Schedule Interview"
                         : "Start Interview Now"}
                     </span>
@@ -746,7 +633,7 @@ const TopicBasedInterview = ({
                           <p className="text-sm text-gray-600 dark:text-gray-300">
                             AI Interviewer:{" "}
                             {interviewers.find(
-                              (i) => i.id === formData.interviewerId
+                              (i) => i._id === formData.interviewerId
                             )?.name || "AI Assistant"}
                           </p>
                         </div>
@@ -770,7 +657,6 @@ const TopicBasedInterview = ({
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                           Topic: {formData.topic}
-                          {formData.subtopic && ` - ${formData.subtopic}`}
                         </p>
                       </div>
 
@@ -834,10 +720,8 @@ const TopicBasedInterview = ({
                             AI Interviewer
                           </div>
                           <div className="text-xs text-blue-800 dark:text-blue-200">
-                            Hello! Let's discuss {formData.topic}
-                            {formData.subtopic &&
-                              `, specifically ${formData.subtopic}`}
-                            . Tell me what you know about this topic.
+                            Hello! Let's discuss {formData.topic}. Tell me what
+                            you know about this topic.
                           </div>
                         </div>
                         <div className="p-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg">

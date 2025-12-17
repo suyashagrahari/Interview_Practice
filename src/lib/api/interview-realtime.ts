@@ -127,7 +127,7 @@ export const interviewRealtimeApi = {
     interviewId: string,
     data: GenerateFirstQuestionRequest
   ): Promise<GenerateFirstQuestionResponse> => {
-    const response = await apiClient.post(`/interview/${interviewId}/generate-first-question`, data);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/generate-first-question`, data);
     return response.data;
   },
 
@@ -139,45 +139,46 @@ export const interviewRealtimeApi = {
     questionId: string,
     data: SubmitAnswerRequest
   ): Promise<SubmitAnswerResponse> => {
-    const response = await apiClient.post(`/interview/${interviewId}/questions/${questionId}/submit-answer`, data);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/questions/${questionId}/submit-answer`, data);
     return response.data;
   },
 
   /**
-   * Start an interview session
+   * Start an interview session (Resume-based)
    */
   startInterview: async (interviewData: any) => {
-    const response = await apiClient.post('/interview/start', interviewData);
+    const response = await apiClient.post('/resume-interview/start', interviewData);
     return response.data;
   },
 
   /**
-   * Get interview by ID
+   * Get interview by ID (Resume-based)
    */
   getInterview: async (interviewId: string) => {
-    const response = await apiClient.get(`/interview/${interviewId}`);
+    const response = await apiClient.get(`/resume-interview/${interviewId}`);
     return response.data;
   },
 
   /**
-   * Update interview status
+   * Update interview status (Resume-based)
    */
   updateInterviewStatus: async (interviewId: string, status: string) => {
-    const response = await apiClient.put(`/interview/${interviewId}/status`, { status });
+    const response = await apiClient.put(`/resume-interview/${interviewId}/status`, { status });
     return response.data;
   },
 
   /**
-   * End interview
+   * End interview (Resume-based)
    */
   endInterview: async (interviewId: string) => {
-    const response = await apiClient.post(`/interview/${interviewId}/end`);
+    const response = await apiClient.post(`/resume-interview/${interviewId}/end`);
     return response.data;
   },
 
   /**
-   * Check for active/incomplete interview for current user
+   * Check for active/incomplete resume-based interview for current user
    * This works across devices - if user has an active interview on any device, it will be returned
+   * Enhanced with user-level tracking
    */
   checkActiveInterview: async (): Promise<{
     success: boolean;
@@ -185,12 +186,16 @@ export const interviewRealtimeApi = {
     data: {
       interviewId: string;
       interviewType: string;
+      interviewSourceType?: string;
       startTime: string;
+      expectedEndTime?: string;
       currentQuestionNumber: number;
       totalQuestions: number;
+      answeredQuestions?: number;
       timeElapsed: number; // in seconds
       timeRemaining: number; // in seconds
       isExpired: boolean;
+      status?: string;
       currentQuestion: InterviewQuestion | null;
       chatHistory: Array<{
         type: 'ai' | 'user';
@@ -198,19 +203,30 @@ export const interviewRealtimeApi = {
         timestamp: string;
       }>;
       warningCount: number;
+      isTerminated?: boolean;
       tabSwitchCount: number;
       violations: {
         tabSwitches: number;
         copyPasteCount: number;
+        faceDetectionIssues?: number;
+        multiplePersonDetections?: number;
+        phoneDetections?: number;
       };
+      lastActivityAt?: string;
+      isActive?: boolean;
+      isCompleted?: boolean;
+      jobRole?: string;
+      level?: string;
+      difficultyLevel?: string;
+      interviewerName?: string;
     } | null;
   }> => {
-    const response = await apiClient.get('/interview/check-active');
+    const response = await apiClient.get('/resume-interview/check-active');
     return response.data;
   },
 
   /**
-   * Resume an active interview from any device
+   * Resume an active resume-based interview from any device
    * Returns complete interview state to restore on client
    */
   resumeInterview: async (interviewId: string): Promise<{
@@ -227,7 +243,15 @@ export const interviewRealtimeApi = {
       violations: any;
     };
   }> => {
-    const response = await apiClient.get(`/interview/resume/${interviewId}`);
+    const response = await apiClient.get(`/resume-interview/resume/${interviewId}`);
+    return response.data;
+  },
+
+  /**
+   * Get expected answer (hint) for a question in resume-based interview
+   */
+  getExpectedAnswer: async (interviewId: string, questionId: string) => {
+    const response = await apiClient.get(`/resume-interview/${interviewId}/questions/${questionId}/hint`);
     return response.data;
   },
 };

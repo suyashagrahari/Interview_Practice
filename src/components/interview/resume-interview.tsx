@@ -56,15 +56,15 @@ import {
 } from "@/lib/interview-persistence";
 import { interviewRealtimeApi } from "@/lib/api/interview-realtime";
 
-interface ResumeBasedInterviewProps {
+interface ResumeInterviewProps {
   onBack?: () => void;
   onStartInterview?: (formData?: any) => void;
 }
 
-const ResumeBasedInterview = ({
+const ResumeInterview = ({
   onBack,
   onStartInterview,
-}: ResumeBasedInterviewProps) => {
+}: ResumeInterviewProps) => {
   const { user } = useAuth();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -609,9 +609,30 @@ const ResumeBasedInterview = ({
       }
     };
 
-    if (isClient) {
+    if (!isClient) return;
+
+    // Initial check only on mount - no periodic polling
+    checkActiveInterview();
+
+    // Check when window/tab gains focus (user comes back to the page)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        checkActiveInterview();
+      }
+    };
+
+    const handleFocus = () => {
       checkActiveInterview();
-    }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
+
+    // Cleanup
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, [isClient]);
 
   // Handler to show active interview modal
@@ -988,8 +1009,17 @@ const ResumeBasedInterview = ({
                             <option value="technical">
                               Technical Interview
                             </option>
-                            <option value="behavioral">
-                              Behavioral Interview
+                            <option value="behavioral" disabled>
+                              Behavioral Interview (Coming Soon)
+                            </option>
+                            <option value="coding" disabled>
+                              Coding Interview (Coming Soon)
+                            </option>
+                            <option value="systemDesign" disabled>
+                              System Design (Coming Soon)
+                            </option>
+                            <option value="mixed" disabled>
+                              Mixed Interview (Coming Soon)
                             </option>
                           </select>
                         </div>
@@ -1450,4 +1480,4 @@ const ResumeBasedInterview = ({
   );
 };
 
-export default ResumeBasedInterview;
+export default ResumeInterview;

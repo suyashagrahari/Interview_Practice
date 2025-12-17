@@ -3,7 +3,9 @@ export * from './auth';
 export * from './strapi';
 export * from './resume';
 export * from './interview';
+export * from './interview-types';
 export * from './interviewer';
+export * from './jd';
 
 // Re-export commonly used types
 export type { User, AuthResponse, SignUpRequest, SignInRequest } from './auth';
