@@ -1,6 +1,6 @@
 import React, { RefObject } from "react";
 import { motion } from "framer-motion";
-import { Bot, User } from "lucide-react";
+import { Bot, User, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import type { ChatMessage } from "../../../types/interview-page/interview.types";
 
 interface ChatSectionProps {
@@ -93,7 +93,7 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                   </span>
                   {/* Message type badges */}
                   <div
-                    className={`flex space-x-1 ${
+                    className={`flex items-center space-x-1 ${
                       message.type === "user" ? "justify-end" : "justify-start"
                     }`}>
                     {message.questionId && (
@@ -116,6 +116,42 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                         A
                       </span>
                     )}
+                    {/* Transcription status badges */}
+                    {message.isTranscribing && (
+                      <motion.span
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${
+                          isDarkMode
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-amber-100 text-amber-700"
+                        }`}>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Transcribing
+                      </motion.span>
+                    )}
+                    {message.isTranscribed && !message.isTranscribing && (
+                      <span
+                        className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${
+                          isDarkMode
+                            ? "bg-emerald-500/20 text-emerald-400"
+                            : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                        <CheckCircle2 className="w-3 h-3" />
+                        Transcribed
+                      </span>
+                    )}
+                    {message.transcriptionFailed && !message.isTranscribing && (
+                      <span
+                        className={`text-xs px-2 py-1 rounded-lg font-medium flex items-center gap-1 ${
+                          isDarkMode
+                            ? "bg-orange-500/20 text-orange-400"
+                            : "bg-orange-100 text-orange-700"
+                        }`}>
+                        <AlertCircle className="w-3 h-3" />
+                        Speech Text
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -130,7 +166,18 @@ export const ChatSection: React.FC<ChatSectionProps> = ({
                       ? "text-slate-200"
                       : "text-slate-700"
                   } ${message.type === "user" ? "text-left" : "text-left"}`}>
-                  {message.message}
+                  {message.isTranscribing ? (
+                    <motion.div
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ duration: 1.5, repeat: Infinity }}
+                      className="flex items-center gap-2 italic">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>{message.message}</span>
+                    </motion.div>
+                  ) : (
+                    message.message
+                  )}
                 </div>
               </div>
             </div>

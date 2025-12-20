@@ -34,7 +34,6 @@ import {
 import { InterviewHeader } from "@/components/interview-page/InterviewHeader";
 import { VideoSection } from "@/components/interview-page/VideoSection";
 import { ChatSection } from "@/components/interview-page/ChatSection";
-import { AnswerInput } from "@/components/interview-page/AnswerInput";
 import { TabSwitchModal } from "@/components/interview-page/Modals/TabSwitchModal";
 import { ExitConfirmModal } from "@/components/interview-page/Modals/ExitConfirmModal";
 
@@ -149,6 +148,13 @@ const InterviewPage = () => {
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  // User's recorded voice playback
+  const [userRecordedAudioUrl, setUserRecordedAudioUrl] = useState<
+    string | null
+  >(null);
+  const [isUserAudioPlaying, setIsUserAudioPlaying] = useState(false);
+  const userAudioRef = useRef<HTMLAudioElement | null>(null);
+
   // UI state
   const [showHint, setShowHint] = useState(false);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
@@ -170,8 +176,20 @@ const InterviewPage = () => {
   const isLoadingFromBackendRef = useRef<boolean>(false);
   const cvInitializedRef = useRef<boolean>(false);
 
+  // Audio recording refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordedAudioBlobRef = useRef<Blob | null>(null);
+
   // Ref for tracking if auto-end has been called
   const autoEndCalledRef = useRef(false);
+
+  // Transcription state
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcribingQuestionId, setTranscribingQuestionId] = useState<
+    string | null
+  >(null);
+  const lastUserMessageIdRef = useRef<string | null>(null);
 
   const {
     cameraStream,
@@ -377,6 +395,91 @@ const InterviewPage = () => {
       setIsAnalyzing(false);
     },
     onProctoringDataReceived: handleProctoringDataReceived,
+    onTranscribing: (data) => {
+      console.log("🎤 Transcription started:", data);
+      setIsTranscribing(true);
+      setTranscribingQuestionId(data.questionId);
+
+      // Update the last user message to show "Transcribing..." state
+      if (lastUserMessageIdRef.current) {
+        setChatMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === lastUserMessageIdRef.current
+              ? {
+                  ...msg,
+                  message: "🎤 Transcribing your answer...",
+                  isTranscribing: true,
+                }
+              : msg
+          )
+        );
+      }
+    },
+    onTranscriptionComplete: (data) => {
+      console.log("✅ Transcription completed:", data);
+      setIsTranscribing(false);
+      setTranscribingQuestionId(null);
+
+      // Update the last user message with transcribed text
+      if (lastUserMessageIdRef.current) {
+        if (data.transcriptionStatus === "success" && data.transcribedText) {
+          // Success: Show transcribed text
+          setChatMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === lastUserMessageIdRef.current
+                ? {
+                    ...msg,
+                    message: data.transcribedText!,
+                    answer: data.transcribedText,
+                    isTranscribing: false,
+                    isTranscribed: true,
+                    transcriptionFailed: false,
+                  }
+                : msg
+            )
+          );
+        } else if (
+          data.transcriptionStatus === "failed" &&
+          data.originalAnswer
+        ) {
+          // Failed: Fallback to original answer with indicator
+          setChatMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === lastUserMessageIdRef.current
+                ? {
+                    ...msg,
+                    message: data.originalAnswer!,
+                    answer: data.originalAnswer,
+                    isTranscribing: false,
+                    isTranscribed: false,
+                    transcriptionFailed: true,
+                  }
+                : msg
+            )
+          );
+        } else {
+          // No transcription or fallback: Just remove transcribing state
+          setChatMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === lastUserMessageIdRef.current
+                ? {
+                    ...msg,
+                    isTranscribing: false,
+                  }
+                : msg
+            )
+          );
+        }
+
+        // Scroll to bottom after update
+        setTimeout(() => {
+          if (chatMessagesRef.current) {
+            chatMessagesRef.current.scrollTop =
+              chatMessagesRef.current.scrollHeight;
+          }
+        }, 100);
+      }
+    },
   });
 
   // ============== HANDLER FUNCTIONS ==============
@@ -392,6 +495,25 @@ const InterviewPage = () => {
       "Audio:",
       audio
     );
+
+    // Clear user's recorded audio when new question arrives
+    if (userRecordedAudioUrl) {
+      console.log("🧹 Clearing user's recorded audio for new question");
+      URL.revokeObjectURL(userRecordedAudioUrl);
+      setUserRecordedAudioUrl(null);
+      setIsUserAudioPlaying(false);
+      // Stop audio if playing
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+    }
+
+    // Clear recorded audio blob
+    if (recordedAudioBlobRef.current) {
+      recordedAudioBlobRef.current = null;
+      audioChunksRef.current = [];
+    }
 
     console.log("🔍 DEBUG: Question received details:", {
       question: question
@@ -613,7 +735,14 @@ const InterviewPage = () => {
   };
 
   const handleSubmitAnswer = async () => {
-    if (!currentQuestion || !interviewId || !userAnswer.trim()) return;
+    // Allow submission if there's recorded audio OR text answer
+    const hasAudio = !!recordedAudioBlobRef.current;
+    const hasText = userAnswer.trim();
+
+    if (!currentQuestion || !interviewId || (!hasAudio && !hasText)) {
+      console.warn("Cannot submit: No audio or text answer provided");
+      return;
+    }
 
     try {
       console.log("📤 Submitting answer via WebSocket...");
@@ -624,32 +753,118 @@ const InterviewPage = () => {
       if (isRecording) {
         console.log("🎤 Stopping speech recognition on answer submission");
         handleStopRecording();
+
+        // Wait a bit for MediaRecorder to finish processing
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      const answerText = userAnswer;
-      addMessageToChat(
-        "user",
-        answerText,
-        currentQuestion.questionId,
-        answerText
-      );
+      // Use text answer if available, otherwise use placeholder (will be replaced by Groq transcription)
+      const answerText = userAnswer.trim() || "";
+
+      // Add message to chat - show voice icon for voice-only answers
+      let messageId: string | null = null;
+      if (userAnswer.trim()) {
+        // Store the message ID for transcription updates
+        const tempId = `${Date.now()}-${Math.random()}`;
+        const newMessage = {
+          id: tempId,
+          type: "user" as const,
+          message: answerText,
+          timestamp: getCurrentTimestamp(),
+          questionId: currentQuestion.questionId,
+          answer: answerText,
+        };
+        setChatMessages((prev) => [...prev, newMessage]);
+        lastUserMessageIdRef.current = tempId;
+        messageId = tempId;
+      } else if (recordedAudioBlobRef.current) {
+        // Add a clean voice message indicator - will be updated with transcription
+        const tempId = `${Date.now()}-${Math.random()}`;
+        const newMessage = {
+          id: tempId,
+          type: "user" as const,
+          message: "🎤 Voice answer",
+          timestamp: getCurrentTimestamp(),
+          questionId: currentQuestion.questionId,
+          answer: "Voice answer submitted",
+          isTranscribing: false, // Will be set to true when transcription starts
+        };
+        setChatMessages((prev) => [...prev, newMessage]);
+        lastUserMessageIdRef.current = tempId;
+        messageId = tempId;
+      }
       setUserAnswer("");
 
-      submitAnswerWS(currentQuestion.questionId, answerText, {
-        timeSpent: proctoringData.timeSpent,
-        startTime: proctoringData.startTime || new Date(),
-        endTime: new Date(),
-        tabSwitches: proctoringData.tabSwitches,
-        copyPasteCount: proctoringData.copyPasteCount,
-        faceDetection: proctoringData.faceDetection,
-        mobileDetection: proctoringData.mobileDetection,
-        laptopDetection: proctoringData.laptopDetection,
-        zoomIn: proctoringData.zoomIn,
-        zoomOut: proctoringData.zoomOut,
-        questionNumber,
-      });
+      // Convert audio blob to base64 if available and create playback URL
+      let audioDataBase64: string | undefined = undefined;
+      if (recordedAudioBlobRef.current) {
+        try {
+          console.log("🎵 Converting audio blob to base64...");
 
-      console.log("✅ Answer submission request sent via WebSocket");
+          // Create blob URL for user playback (don't upload to backend)
+          const audioUrl = URL.createObjectURL(recordedAudioBlobRef.current);
+          setUserRecordedAudioUrl(audioUrl);
+          console.log("✅ User audio playback URL created:", audioUrl);
+
+          // Convert to base64 for backend transcription
+          const reader = new FileReader();
+          audioDataBase64 = await new Promise<string>((resolve, reject) => {
+            reader.onloadend = () => {
+              const base64String = reader.result as string;
+              // Remove data URL prefix if present (data:audio/webm;base64,)
+              const base64 = base64String.includes(",")
+                ? base64String.split(",")[1]
+                : base64String;
+              console.log(
+                `✅ Audio converted to base64: ${base64.length} characters`
+              );
+              resolve(base64);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(recordedAudioBlobRef.current!);
+          });
+        } catch (conversionError) {
+          console.error(
+            "❌ Error converting audio to base64:",
+            conversionError
+          );
+          // Continue without audio if conversion fails
+        }
+      } else {
+        console.log("📝 No audio recording available to send");
+        // Clear user audio URL if no recording
+        if (userRecordedAudioUrl) {
+          URL.revokeObjectURL(userRecordedAudioUrl);
+          setUserRecordedAudioUrl(null);
+        }
+      }
+
+      submitAnswerWS(
+        currentQuestion.questionId,
+        answerText,
+        {
+          timeSpent: proctoringData.timeSpent,
+          startTime: proctoringData.startTime || new Date(),
+          endTime: new Date(),
+          tabSwitches: proctoringData.tabSwitches,
+          copyPasteCount: proctoringData.copyPasteCount,
+          faceDetection: proctoringData.faceDetection,
+          mobileDetection: proctoringData.mobileDetection,
+          laptopDetection: proctoringData.laptopDetection,
+          zoomIn: proctoringData.zoomIn,
+          zoomOut: proctoringData.zoomOut,
+          questionNumber,
+        },
+        audioDataBase64 // Pass audio data as base64
+      );
+
+      // Don't clear the blob yet - keep it for playback
+      // The blob will be cleared when next question arrives
+
+      console.log("✅ Answer submission request sent via WebSocket", {
+        hasAudio: !!audioDataBase64,
+        audioLength: audioDataBase64?.length || 0,
+      });
     } catch (error) {
       console.error("Error submitting answer:", error);
       setIsSubmittingAnswer(false);
@@ -664,8 +879,52 @@ const InterviewPage = () => {
     setIsAudioPlaying(false);
 
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log("🎤 Microphone permission granted");
+
+      // Initialize MediaRecorder to capture audio
+      try {
+        // Try to use webm format (better browser support)
+        const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/mp4")
+          ? "audio/mp4"
+          : "audio/webm"; // fallback
+
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: mimeType,
+        });
+
+        audioChunksRef.current = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+            console.log(`📦 Audio chunk received: ${event.data.size} bytes`);
+          }
+        };
+
+        mediaRecorder.onstop = () => {
+          // Combine all audio chunks into a single blob
+          const audioBlob = new Blob(audioChunksRef.current, {
+            type: mimeType,
+          });
+          recordedAudioBlobRef.current = audioBlob;
+          console.log(
+            `✅ Audio recording stopped. Total size: ${audioBlob.size} bytes, type: ${mimeType}`
+          );
+
+          // Stop all tracks to release microphone
+          stream.getTracks().forEach((track) => track.stop());
+        };
+
+        mediaRecorder.start();
+        mediaRecorderRef.current = mediaRecorder;
+        console.log(`🎙️ MediaRecorder started with mimeType: ${mimeType}`);
+      } catch (recorderError) {
+        console.warn("⚠️ MediaRecorder initialization failed:", recorderError);
+        // Continue without MediaRecorder - speech recognition will still work
+      }
     } catch (error) {
       console.error("🎤 Microphone permission denied:", error);
       alert(
@@ -696,6 +955,30 @@ const InterviewPage = () => {
     setIsRecording(false);
     setSpeechDisabled(true);
     setIsAISpeaking(true);
+
+    // Stop MediaRecorder if it's running
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      try {
+        mediaRecorderRef.current.stop();
+        console.log("🎙️ MediaRecorder stopped");
+      } catch (error) {
+        console.error("Error stopping MediaRecorder:", error);
+      }
+    }
+
+    // Clear any existing user audio URL when stopping recording (new recording will replace it)
+    if (userRecordedAudioUrl) {
+      URL.revokeObjectURL(userRecordedAudioUrl);
+      setUserRecordedAudioUrl(null);
+      setIsUserAudioPlaying(false);
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+    }
 
     if (isSpeechSupported && stopSpeechInterviewSession) {
       console.log("🎤 Stopping interview session - disabling auto-restart");
@@ -1495,6 +1778,19 @@ const InterviewPage = () => {
     }
   }, [isAudioPlaying, isAnalyzing]);
 
+  // Cleanup user audio URL on unmount
+  useEffect(() => {
+    return () => {
+      if (userRecordedAudioUrl) {
+        URL.revokeObjectURL(userRecordedAudioUrl);
+      }
+      if (userAudioRef.current) {
+        userAudioRef.current.pause();
+        userAudioRef.current = null;
+      }
+    };
+  }, [userRecordedAudioUrl]);
+
   // Fetch proctoring data from backend when WebSocket connects
   useEffect(() => {
     if (isSocketConnected && interviewId) {
@@ -1858,7 +2154,7 @@ const InterviewPage = () => {
         {/* Main Interview Interface */}
         <div className="h-[calc(100vh-4rem)] w-full flex bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
           {/* Left Panel - Main Interview Area */}
-          <div className="w-[70%] flex flex-col">
+          <div className="w-[75%] flex flex-col">
             {/* Video Area */}
             <div className="flex-1 px-4 pt-4 min-h-0">
               <div className="h-full flex flex-col min-h-0">
@@ -1896,24 +2192,37 @@ const InterviewPage = () => {
                   showSubtitles={showSubtitles}
                   webkitInterimTranscript={webkitInterimTranscript}
                   speechDisabled={speechDisabled}
+                  onSubmitAnswer={handleSubmitAnswer}
+                  hasRecordedAudio={!!userRecordedAudioUrl}
+                  onPlayRecordedAudio={() => {
+                    if (!userAudioRef.current && userRecordedAudioUrl) {
+                      const audio = new Audio(userRecordedAudioUrl);
+                      userAudioRef.current = audio;
+                      audio.onended = () => {
+                        setIsUserAudioPlaying(false);
+                        userAudioRef.current = null;
+                      };
+                      audio.onerror = () => {
+                        console.error("Error playing user audio");
+                        setIsUserAudioPlaying(false);
+                        userAudioRef.current = null;
+                      };
+                    }
+
+                    if (isUserAudioPlaying) {
+                      userAudioRef.current?.pause();
+                      setIsUserAudioPlaying(false);
+                    } else {
+                      userAudioRef.current?.play();
+                      setIsUserAudioPlaying(true);
+                    }
+                  }}
+                  isUserAudioPlaying={isUserAudioPlaying}
                 />
               </div>
             </div>
 
-            {/* Chat Input Area */}
-            <div className="px-4 pb-4">
-              <AnswerInput
-                isDarkMode={isDarkMode}
-                userAnswer={userAnswer}
-                setUserAnswer={setUserAnswer}
-                isGeneratingQuestion={isGeneratingQuestion}
-                isSubmittingAnswer={isSubmittingAnswer}
-                currentQuestion={currentQuestion}
-                isRecording={isRecording}
-                isListening={isListening}
-                onSubmit={handleSubmitAnswer}
-              />
-            </div>
+            {/* Chat Input Area - Removed, controls are now in video overlay */}
           </div>
 
           {/* Right Panel - Transcript */}

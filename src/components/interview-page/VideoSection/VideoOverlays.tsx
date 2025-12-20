@@ -9,6 +9,8 @@ import {
   Square,
   AlertCircle,
   RotateCcw,
+  Send,
+  Volume2,
 } from "lucide-react";
 import Image from "next/image";
 import AiImage from "../../../../public/images/ai_image.jpeg";
@@ -44,6 +46,10 @@ interface VideoOverlaysProps {
   showSubtitles: boolean;
   webkitInterimTranscript: string;
   speechDisabled: boolean;
+  onSubmitAnswer?: () => void;
+  hasRecordedAudio?: boolean;
+  onPlayRecordedAudio?: () => void;
+  isUserAudioPlaying?: boolean;
 }
 
 export const VideoOverlays: React.FC<VideoOverlaysProps> = ({
@@ -71,6 +77,10 @@ export const VideoOverlays: React.FC<VideoOverlaysProps> = ({
   showSubtitles,
   webkitInterimTranscript,
   speechDisabled,
+  onSubmitAnswer,
+  hasRecordedAudio = false,
+  onPlayRecordedAudio,
+  isUserAudioPlaying = false,
 }) => {
   return (
     <>
@@ -184,15 +194,15 @@ export const VideoOverlays: React.FC<VideoOverlaysProps> = ({
         </div>
       )}
 
-      {/* Start Answering Button - Bottom Left */}
-      <div className="absolute bottom-4 left-4">
+      {/* Start Answering / Send Answer Button - Bottom Left */}
+      <div className="absolute bottom-4 left-4 flex items-center gap-3">
         {!isRecordingState ? (
           <motion.button
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.95 }}
             onClick={onStartRecording}
             disabled={isSpeechInitializing}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl transition-all duration-300 font-bold text-xs shadow-lg ${
+            className={`flex items-center space-x-2 px-5 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm shadow-lg ${
               isSpeechInitializing
                 ? "bg-gray-500 cursor-not-allowed"
                 : "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white hover:shadow-blue-500/25"
@@ -206,10 +216,36 @@ export const VideoOverlays: React.FC<VideoOverlaysProps> = ({
           <motion.button
             whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.95 }}
-            onClick={onStopRecording}
-            className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl transition-all duration-300 font-bold text-xs shadow-lg hover:shadow-red-500/25">
-            <Square className="w-4 h-4" />
-            <span>{isListening ? "Stop Listening" : "Stop Answering"}</span>
+            onClick={onSubmitAnswer || onStopRecording}
+            className="flex items-center space-x-2 px-5 py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white rounded-xl transition-all duration-300 font-bold text-sm shadow-lg hover:shadow-green-500/25">
+            <Send className="w-4 h-4" />
+            <span>Send Answer</span>
+          </motion.button>
+        )}
+        
+        {/* Listen to Recorded Answer Icon - Small */}
+        {hasRecordedAudio && onPlayRecordedAudio && (
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={onPlayRecordedAudio}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+              isUserAudioPlaying
+                ? isDarkMode
+                  ? "bg-red-500/90 hover:bg-red-600 text-white shadow-red-500/50"
+                  : "bg-red-500 hover:bg-red-600 text-white shadow-red-500/50"
+                : isDarkMode
+                ? "bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 border border-blue-500/30 hover:border-blue-500/50"
+                : "bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 hover:border-blue-300"
+            }`}
+            title={isUserAudioPlaying ? "Stop playback" : "Listen to your answer"}>
+            {isUserAudioPlaying ? (
+              <Square className="w-4 h-4" />
+            ) : (
+              <Volume2 className="w-4 h-4" />
+            )}
           </motion.button>
         )}
       </div>

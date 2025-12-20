@@ -13,6 +13,8 @@ interface UseInterviewWebSocketProps {
   onInterviewComplete: (data: any) => void;
   onError: (error: { message: string; code: string }) => void;
   onProctoringDataReceived?: (data: any) => void;
+  onTranscribing?: (data: { questionId: string; status: string }) => void;
+  onTranscriptionComplete?: (data: { questionId: string; transcribedText: string | null; transcriptionStatus: string; originalAnswer: string | null }) => void;
 }
 
 interface AudioData {
@@ -31,6 +33,8 @@ export const useInterviewWebSocket = ({
   onInterviewComplete,
   onError,
   onProctoringDataReceived,
+  onTranscribing,
+  onTranscriptionComplete,
 }: UseInterviewWebSocketProps) => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -143,10 +147,28 @@ export const useInterviewWebSocket = ({
       setIsAnalyzing(true);
     });
 
+    // Transcription events
+    newSocket.on('answer:transcribing', (response) => {
+      console.log('🎤 Transcribing answer:', response);
+      if (response.success && response.data && onTranscribing) {
+        onTranscribing(response.data);
+      }
+    });
+
     newSocket.on('answer:submitted', (response) => {
       console.log('✅ Answer submitted:', response);
       if (response.success && response.data) {
         onAnswerSubmitted(response.data);
+        
+        // Handle transcription completion
+        if (onTranscriptionComplete && response.data.hasAudio) {
+          onTranscriptionComplete({
+            questionId: response.data.questionId,
+            transcribedText: response.data.transcribedText,
+            transcriptionStatus: response.data.transcriptionStatus,
+            originalAnswer: response.data.originalAnswer,
+          });
+        }
       }
     });
 
@@ -249,14 +271,19 @@ export const useInterviewWebSocket = ({
 
   // Submit answer
   const submitAnswer = useCallback(
-    (questionId: string, answer: string, proctoringData: any) => {
+    (questionId: string, answer: string, proctoringData: any, audioData?: string) => {
       if (!socket || !isConnected || !interviewId) {
         console.error('Cannot submit answer: WebSocket not ready');
         return;
       }
 
       const effectiveUserId = userId || `interview-${interviewId}`;
-      console.log('📤 Submitting answer...', { questionId, userId: effectiveUserId });
+      console.log('📤 Submitting answer...', { 
+        questionId, 
+        userId: effectiveUserId,
+        hasAudio: !!audioData,
+        audioLength: audioData?.length || 0
+      });
       setIsAnalyzing(true);
       socket.emit('answer:submit', {
         interviewId,
@@ -264,6 +291,7 @@ export const useInterviewWebSocket = ({
         userId: effectiveUserId,
         answer,
         proctoringData,
+        audioData, // Base64 encoded audio data
       });
     },
     [socket, isConnected, interviewId, userId]

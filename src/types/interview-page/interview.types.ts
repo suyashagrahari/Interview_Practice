@@ -11,6 +11,9 @@ export interface ChatMessage {
   questionId?: string;
   answer?: string;
   analysis?: any; // Use proper AnswerAnalysis type from API
+  isTranscribing?: boolean; // True when transcription is in progress
+  isTranscribed?: boolean; // True when transcription completed successfully
+  transcriptionFailed?: boolean; // True when transcription failed
 }
 
 export interface AvatarData {
